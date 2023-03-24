@@ -1,4 +1,5 @@
 {
     "api_key_file": "openai_key_file",
-    "token_usage_file": "data/token_usage.json"
+    "token_usage_file": "data/token_usage.json",
+    "prompts_dir": "data/prompts"
 }

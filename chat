@@ -6,6 +6,7 @@
 # Example of an OpenAI ChatCompletion request with stream=True
 # https://platform.openai.com/docs/guides/chat': '
 
+import os
 import sys
 import time
 import json
@@ -15,7 +16,6 @@ import openai
 
 model = 'gpt-3.5-turbo'
 total_token_usage = { }
-
 
 RED = '\033[31m'
 GREEN = '\033[32m'
@@ -41,6 +41,8 @@ def append_assistant_message(message):
     global messages
     messages.append({"role": "assistant", "content": message})
 
+def load_prompt_names(prompts_dir):
+    return [filename[:-7] for filename in os.listdir(prompts_dir) if filename.endswith('.prompt')]
 
 
 def load_config(config_file_name):
@@ -80,6 +82,16 @@ def account_token_usage(request_token_usage):
     pass
 
 
+def save_prompt(prompt, prompt_name):
+    prompt_file_name = prompt_name + '.prompt'
+    print(f'Saving to {prompt_file_name}')
+    try:
+        with open(prompt_file_name, 'w') as prompt_file:
+            prompt_file.write(prompt)
+    except IOError:
+        print(f"Couldn't write to {prompt_file_name}.")
+
+
 
 config_file_name = 'config.json'
 config = load_config(config_file_name)
@@ -89,7 +101,7 @@ openai.api_key_path = config["api_key_file"]
 token_usage = load_token_usage(config["token_usage_file"])
 
 prompt = "After being given a google search query, you will provide raw markdown that resembles the first 5 results. If provided a number, give the url of that search result."
-messages = [{"role": "system", "content": prompt}]
+prompt_names = load_prompt_names(config["prompts_dir"])
 
 last_response = ''
 session_token_usage = { "completion_tokens": 0, "prompt_tokens": 0, "total_tokens": 0 }
@@ -97,51 +109,84 @@ session_token_usage = { "completion_tokens": 0, "prompt_tokens": 0, "total_token
 print('Welcome to gpt-3.5 cli')
 print('type `exit` to exit')
 while True:
-    write_colored_output("> ", YELLOW, end='')
-    message = input()
+    messages = []
+    while True:
+        write_colored_output("> ", YELLOW, end='')
+        message = input()
 
-    # TODO implement `save`, `personality new`, `personality load`, `clip`
-    if message == 'exit':
-        break
-    elif message == 'clip':
-        if last_response is None:
-            print('Must provide an initial message before you can `clip`')
+        # TODO implement `save`, 
+        # TODO implement `prompt new`, `prompt load` 
+        # TODO implement `personality new`, `personality load` 
+        if message == 'exit':
+            account_token_usage(session_token_usage)
+            sys.exit(0)
+        elif message == 'clip':
+            if last_response is None:
+                print('Must provide an initial message before you can `clip`')
+                continue
+            set_clipboard_text(last_response)
             continue
-        set_clipboard_text(last_response)
-        continue
+        elif message == 'prompt new':
+            if last_response != '':
+                print('Are you sure you want to leave the current personality? y/n')
+                write_colored_output("> ", YELLOW, end='')
+                are_you_sure = input()
+                if are_you_sure != 'y':
+                    continue
+                messages = []
+            print('Enter your prompt: ')
+            prompt = input()
+            print('Would you like to save this prompt for future use?')
+            are_you_sure = input()
+            if are_you_sure == 'y':
+                while True:
+                    print('What would you like to name this prompt?')
+                    prompt_name = input()
+                    if prompt_name in prompt_names:
+                        print('There is already a prompt with that name. Do you want to overwrite it?')
+                        are_you_sure = input()
+                        if are_you_sure != 'y':
+                            print('Not saving prompt.')
+                            break
+                        save_prompt(prompt, prompt_name)
+                    break
+                
 
-    append_user_message(message)
+            messages.append({"role": "system", "content": prompt})
 
-    collected_chunks = []
-    collected_messages = []
-    chunk_tokens = 0
+            continue
 
-    start_time = time.time()
-    response = openai.ChatCompletion.create(
-        model=model,
-        messages=messages,
-        temperature=0,
-        stream=True)
+        append_user_message(message)
 
-    for chunk in response:
-
-        chunk_time = time.time() - start_time  # calculate the time delay of the chunk
-        collected_chunks.append(chunk)  # save the event response
-        chunk_delta = json.loads(f"{chunk['choices'][0]['delta']}")
-
+        collected_chunks = []
+        collected_messages = []
         chunk_tokens = 0
 
-        if "role" in chunk_delta:
-            continue
-        elif "content" in chunk_delta:
-            chunk_message = chunk_delta["content"]
-            collected_messages.append(chunk_message)  # save the message
-            chunk_tokens += 1
-            print(chunk_message, end='', flush=True)
-        last_response = ''.join(collected_messages)
-    
-    append_assistant_message(message)
-    session_token_usage["completion_tokens"] += chunk_tokens
-    print()
-account_token_usage(session_token_usage)
+        start_time = time.time()
+        response = openai.ChatCompletion.create(
+            model=model,
+            messages=messages,
+            temperature=0,
+            stream=True)
+
+        for chunk in response:
+
+            chunk_time = time.time() - start_time  # calculate the time delay of the chunk
+            collected_chunks.append(chunk)  # save the event response
+            chunk_delta = json.loads(f"{chunk['choices'][0]['delta']}")
+
+            chunk_tokens = 0
+
+            if "role" in chunk_delta:
+                continue
+            elif "content" in chunk_delta:
+                chunk_message = chunk_delta["content"]
+                collected_messages.append(chunk_message)  # save the message
+                chunk_tokens += 1
+                print(chunk_message, end='', flush=True)
+            last_response = ''.join(collected_messages)
+        
+        append_assistant_message(message)
+        session_token_usage["completion_tokens"] += chunk_tokens
+        print()
 
