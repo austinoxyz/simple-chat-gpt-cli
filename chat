@@ -14,9 +14,8 @@ import subprocess
 import openai
 
 model = 'gpt-3.5-turbo'
-api_key_file_name = "./openai_key_file"
-openai.api_key_path = api_key_file_name
 total_token_usage = { }
+
 
 RED = '\033[31m'
 GREEN = '\033[32m'
@@ -45,12 +44,11 @@ def append_assistant_message(message):
 
 
 def load_config(config_file_name):
-    # read config file
     try:
         json_raw = ''
         with open(config_file_name, 'r') as config_file:
             json_raw += config_file.read()
-        config_raw = json.loads(json_raw)
+        config = json.loads(json_raw)
     except IOError:
         print(f"Couldn't read {config_file_name}. Wheres your config?")
         sys.exit(1)
@@ -58,61 +56,43 @@ def load_config(config_file_name):
         print(f"Malformed json in {config_file_name}:")
         import traceback
         print(traceback.format_exc())
+    return config
 
-    # read api key
+def load_api_key(api_key_file_name):
     try:
-        api_key_file_name = config_raw["api_key_file"]
         with open(api_key_file_name, 'r') as api_key_file:
             key = api_key_file.readline()
     except IOError:
         print(f"Couldn't read {api_key_file_name}. Check your config!")
         sys.exit(1)
+    return key
 
-    # read token usage
+def load_token_usage(token_usage_file_name):
     try:
-        token_usage_file_name = config_raw["token_usage_file"]
         with open(token_usage_file_name, 'r') as token_usage_file:
             token_usage = json.loads(token_usage_file.readline())
     except IOError:
         print(f"Couldn't read {token_usage_file_name}. Check your config!")
         sys.exit(1)
-
-    config["api_key"] = key
-    return config, token_usage
-
-
-
-
-
-
+    return token_usage
 
 def account_token_usage(request_token_usage):
-    global total_token_usage
-    total_token_usage["completion_tokens"] += request_token_usage["completion_tokens"]
-    total_token_usage["prompt_tokens"] += 0 # request_token_usage["prompt_tokens"]
-    total_token_usage["total_tokens"] += request_token_usage["completion_tokens"] # request_token_usage["total_tokens"]
+    pass
 
 
 
-def print_keys(my_dict):
-    print("keys:")
-    for key in my_dict.keys():
-        print(key)
-
-
-
-
-
-config = {}
 config_file_name = 'config.json'
+config = load_config(config_file_name)
 
-config, total_token_usage = load_config(config_file_name )
-session_token_usage = { "completion_tokens": 0, "prompt_tokens": 0, "total_tokens": 0 }
+openai.api_key_path = config["api_key_file"]
+
+token_usage = load_token_usage(config["token_usage_file"])
 
 prompt = "After being given a google search query, you will provide raw markdown that resembles the first 5 results. If provided a number, give the url of that search result."
 messages = [{"role": "system", "content": prompt}]
 
 last_response = ''
+session_token_usage = { "completion_tokens": 0, "prompt_tokens": 0, "total_tokens": 0 }
 
 print('Welcome to gpt-3.5 cli')
 print('type `exit` to exit')
@@ -132,25 +112,22 @@ while True:
 
     append_user_message(message)
 
+    collected_chunks = []
+    collected_messages = []
+    chunk_tokens = 0
+
     start_time = time.time()
     response = openai.ChatCompletion.create(
         model=model,
         messages=messages,
         temperature=0,
-        stream=True
-    )
+        stream=True)
 
-    collected_chunks = []
-    collected_messages = []
-
-    chunk_tokens = 0
     for chunk in response:
-#        print_keys(chunk)
 
         chunk_time = time.time() - start_time  # calculate the time delay of the chunk
         collected_chunks.append(chunk)  # save the event response
         chunk_delta = json.loads(f"{chunk['choices'][0]['delta']}")
-#        print_keys(chunk_delta)
 
         chunk_tokens = 0
 
@@ -167,7 +144,4 @@ while True:
     session_token_usage["completion_tokens"] += chunk_tokens
     print()
 account_token_usage(session_token_usage)
-
-#session_total_tokens = session_token_usage["total_tokens"]
-#print(f'\nConversation ended.\nTotal token usage:\n{ session_total_tokens }')
 
