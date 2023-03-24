@@ -167,7 +167,7 @@ model = DEFAULT_MODEL
 if "model" in config:
     model = config["model"]
 
-token_usage = load_token_usage(config["token_usage_file"])
+token_usage = load_token_usage(get_data_dir() + '/token_usage.json')
 session_token_usage = { "completion_tokens": 0, "prompt_tokens": 0, "total_tokens": 0 }
 
 prompt = "After being given a google search query, you will provide raw markdown that resembles the first 5 results. If provided a number, give the url of that search result."
