@@ -1,4 +1,4 @@
-# main.py
+#!/usr/bin/python3
 
 # Refererence URL
 # https://github.com/openai/openai-cookbook/blob/main/examples/How_to_stream_completions.ipynb
@@ -9,6 +9,8 @@
 import sys
 import time
 import json
+import subprocess
+
 import openai
 
 model = 'gpt-3.5-turbo'
@@ -25,11 +27,22 @@ RESET = '\033[0m'
 def write_colored_output(output, color, end='\n'):
     sys.stdout.write(color + output + RESET + end)
 
-def account_token_usage(request_token_usage):
-    global total_token_usage
-    total_token_usage["completion_tokens"] += request_token_usage["completion_tokens"]
-    total_token_usage["prompt_tokens"] += request_token_usage["prompt_tokens"]
-    total_token_usage["total_tokens"] += request_token_usage["total_tokens"]
+def set_clipboard_text(text):
+    p = subprocess.Popen(['xclip', '-selection', 'clipboard'], stdin=subprocess.PIPE)
+    p.stdin.write(text.encode('utf-8'))
+    p.stdin.close()
+    p.wait()
+
+
+def append_user_message(message):
+    global messages
+    messages.append({"role": "user", "content": message})
+
+def append_assistant_message(message):
+    global messages
+    messages.append({"role": "assistant", "content": message})
+
+
 
 def load_config(config_file_name):
     # read config file
@@ -68,23 +81,61 @@ def load_config(config_file_name):
     return config, token_usage
 
 
+
+
+
+
+
+def account_token_usage(request_token_usage):
+    global total_token_usage
+    total_token_usage["completion_tokens"] += request_token_usage["completion_tokens"]
+    total_token_usage["prompt_tokens"] += 0 # request_token_usage["prompt_tokens"]
+    total_token_usage["total_tokens"] += request_token_usage["completion_tokens"] # request_token_usage["total_tokens"]
+
+
+
+def print_keys(my_dict):
+    print("keys:")
+    for key in my_dict.keys():
+        print(key)
+
+
+
+
+
 config = {}
-config_file_name = 'example_config.json'
-config, token_usage = load_config(config_file_name )
+config_file_name = 'config.json'
+
+config, total_token_usage = load_config(config_file_name )
+session_token_usage = { "completion_tokens": 0, "prompt_tokens": 0, "total_tokens": 0 }
+
+prompt = "After being given a google search query, you will provide raw markdown that resembles the first 5 results. If provided a number, give the url of that search result."
+messages = [{"role": "system", "content": prompt}]
+
+last_response = ''
 
 print('Welcome to gpt-3.5 cli')
 print('type `exit` to exit')
-
 while True:
     write_colored_output("> ", YELLOW, end='')
     message = input()
+
+    # TODO implement `save`, `personality new`, `personality load`, `clip`
     if message == 'exit':
         break
+    elif message == 'clip':
+        if last_response is None:
+            print('Must provide an initial message before you can `clip`')
+            continue
+        set_clipboard_text(last_response)
+        continue
+
+    append_user_message(message)
 
     start_time = time.time()
     response = openai.ChatCompletion.create(
         model=model,
-        messages=[{'role': 'user', 'content': f'{message}'}],
+        messages=messages,
         temperature=0,
         stream=True
     )
@@ -92,28 +143,31 @@ while True:
     collected_chunks = []
     collected_messages = []
 
+    chunk_tokens = 0
     for chunk in response:
+#        print_keys(chunk)
+
         chunk_time = time.time() - start_time  # calculate the time delay of the chunk
         collected_chunks.append(chunk)  # save the event response
-        chunk_json = json.loads(f"{chunk['choices'][0]['delta']}")
+        chunk_delta = json.loads(f"{chunk['choices'][0]['delta']}")
+#        print_keys(chunk_delta)
 
-#        print("keys:")
-#        for key in chunk_json.keys():
-#            print(key)
+        chunk_tokens = 0
 
-        if "role" in chunk_json:
-            pass
-        elif "content" in chunk_json:
-            chunk_message = chunk_json["content"]
+        if "role" in chunk_delta:
+            continue
+        elif "content" in chunk_delta:
+            chunk_message = chunk_delta["content"]
             collected_messages.append(chunk_message)  # save the message
+            chunk_tokens += 1
             print(chunk_message, end='', flush=True)
-
-    print()
-print(f'\nConversation ended.\nTotal token usage:\n{token_usage}')
+        last_response = ''.join(collected_messages)
     
+    append_assistant_message(message)
+    session_token_usage["completion_tokens"] += chunk_tokens
+    print()
+account_token_usage(session_token_usage)
 
-
-
-
-#    print(f"{chunk_message}")
+#session_total_tokens = session_token_usage["total_tokens"]
+#print(f'\nConversation ended.\nTotal token usage:\n{ session_total_tokens }')
 
