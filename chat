@@ -251,16 +251,6 @@ def print_startup_message() -> None:
 {truecolor_ify('help', config['colors']['blue'])} for a list of commands"))
     print(flush=True)
 
-def print_command_usage(command_name: str, usage_info: int) -> None:
-    colored_command = truecolor_ify(command_name, config['colors']['blue'])
-    half_term_width = int(TERM_WIDTH / 2)
-    usage_split = wrap_truecolor_text(usage_info, (half_term_width + 1, TERM_WIDTH - int(TERM_WIDTH * 0.1)), half_term_width + 1)
-    print(rjust_truecolor(colored_command, width=(half_term_width - 1)), end='')
-    print(f"  {usage_split[0]}")
-    if len(usage_split) == 0:
-        return
-    for s in usage_split[1:]:
-        print(f"{' ' * (half_term_width + 1)}{s}")
 
 def print_help_message() -> None:
     command_name_total_space = int(TERM_WIDTH * 0.35)
