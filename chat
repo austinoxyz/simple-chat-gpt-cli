@@ -282,9 +282,7 @@ while True:
     while True:
         print_prompt(); message = input()
 
-        # TODO implement `help`, 
         # TODO implement `save`, 
-        # TODO implement `prompt new`, `prompt load`, `prompt list`
         # TODO implement `personality new`, `personality load` 
         # TODO implement `clip code [n]`
         if message == 'exit':
