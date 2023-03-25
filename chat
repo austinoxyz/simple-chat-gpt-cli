@@ -1,17 +1,21 @@
 #!/usr/bin/python3
 
-import os
-import sys
-import subprocess
-import time
-import math
-import json
-import re
 from typing import List
+
+import sys
+import re
+import openai
+
+from os import getenv, listdir, path
+from subprocess import Popen, PIPE
+from time import time
+from math import floor
+from json import loads, JSONDecodeError
+from numpy import zeros, uint32
 
 from pathlib import Path  # for xdg
 
-import openai
+
 
 
 APP_NAME = 'simple-chat'
@@ -53,14 +57,14 @@ def center_truecolor(string: str, width=TERM_WIDTH):
     length = len_truecolor(string)
     if length >= width:
         return string
-    padding = ' ' * math.floor((width - len_truecolor(string)) / 2)
+    padding = ' ' * floor((width - len_truecolor(string)) / 2)
     return padding + string + padding
 
 def rjust_truecolor(string: str, width=TERM_WIDTH):
     length = len_truecolor(string)
     if length >= width:
         return string
-    return (' ' * math.floor((width - len_truecolor(string)))) + string
+    return (' ' * floor((width - len_truecolor(string)))) + string
 
 def split_string_into_len_n_substrings(input_string: str, n: int) -> List[str]:
     return [input_string[i:i+n] for i in range(0, len(input_string), n)]
@@ -114,7 +118,7 @@ def wrap_truecolor_text(text: str, width_box: (int, int), pos: (int)) -> List[st
 
 # use xclip to put the last chat completion in the clipboard
 def set_clipboard_text(text) -> None:
-    p = subprocess.Popen(['xclip', '-selection', 'clipboard'], stdin=subprocess.PIPE)
+    p = Popen(['xclip', '-selection', 'clipboard'], stdin=PIPE)
     p.stdin.write(text.encode('utf-8'))
     p.stdin.close()
     p.wait()
@@ -126,13 +130,13 @@ def set_clipboard_text(text) -> None:
 
 ## XDG stuff
 def get_config_dir() -> str:
-    config_dir = os.getenv('XDG_CONFIG_HOME', '')
+    config_dir = getenv('XDG_CONFIG_HOME', '')
     if config_dir == '' or config_dir[0] != '/':
         return str(Path.home().joinpath('.config', APP_NAME))
     return str(Path(config_dir).joinpath(APP_NAME))
 
 def get_data_dir() -> str:
-    data_dir = os.getenv('XDG_DATA_HOME', '')
+    data_dir = getenv('XDG_DATA_HOME', '')
     if data_dir == '' or data_dir[0] != '/':
         return str(Path.home().joinpath('.local/share', APP_NAME))
     return str(Path(data_dir).joinpath(APP_NAME))
@@ -142,14 +146,37 @@ def get_data_dir() -> str:
 
 
 
+def levenshtein_dist(s1: str, s2: str) -> int:
+    len1 = len(s1)
+    len2 = len(s2)
+    if len1 == 0:
+        return len2
+    elif len2 == 0:
+        return len1
+    prefix_matrix = zeros((len1 + 1, len2 + 1), dtype=uint32)
+    for x in range(1, len1 + 1):
+        prefix_matrix[x][0] = x
+    for x in range(1, len2 + 1):
+        prefix_matrix[0][x] = x
+    for j in range(1, len2 + 1):
+        for i in range(1, len1 + 1):
+            sub_cost = 0 if s1[i - 1] == s2[j - 1] else 1
+            prefix_matrix[i][j] = min(
+                prefix_matrix[i - 1][j] + 1,
+                prefix_matrix[i][j - 1] + 1,
+                prefix_matrix[i - 1][j - 1] + sub_cost)
+    prefix_matrix_sz = prefix_matrix.size
+    return (prefix_matrix.flatten())[prefix_matrix_sz - 1]
+
+
 
 
 def load_prompt_names(prompts_dir) -> List[str]:
-    return [filename[:-7] for filename in os.listdir(prompts_dir) if filename.endswith('.prompt')]
+    return [filename[:-7] for filename in listdir(prompts_dir) if filename.endswith('.prompt')]
 
 def load_prompt(prompt_name, prompts_dir) -> str:
     prompt_file_name = prompt_name + '.prompt'
-    prompt_path = os.path.join(prompts_dir, prompt_file_name)
+    prompt_path = path.join(prompts_dir, prompt_file_name)
     try:
         with open(prompt_path, 'r') as prompt_file:
             prompt = prompt_file.read()
@@ -176,7 +203,7 @@ def load_config(config_file_name):
         json_raw = ''
         with open(config_file_name, 'r') as config_file:
             json_raw += config_file.read()
-        config = json.loads(json_raw)
+        config = loads(json_raw)
     except IOError:
         print(f"Couldn't read {config_file_name}. Wheres your config?")
         sys.exit(1)
@@ -198,7 +225,7 @@ def load_api_key(api_key_file_name) -> str:
 def load_token_usage(token_usage_file_name):
     try:
         with open(token_usage_file_name, 'r') as token_usage_file:
-            token_usage = json.loads(token_usage_file.readline())
+            token_usage = loads(token_usage_file.readline())
     except IOError:
         print(f"Couldn't read {token_usage_file_name}. Check your config!")
         sys.exit(1)
@@ -241,6 +268,25 @@ commands = {'exit': 'exit simple-chat-gpt-cli',
             'prompt list': f"list the saved prompts located in your {truecolor_ify('prompts_dir', config['colors']['green'])}", 
             'prompt load': f"load a saved prompt from your {truecolor_ify('prompts_dir', config['colors']['green'])}" }
 
+LONGEST_COMMAND_NAME = max(commands.keys(), key=lambda k: len(k))
+
+SIMILAR_COMMAND_LENGTH_CUTOFF = int(len(LONGEST_COMMAND_NAME) * 1.5)
+LEV_DIST_CUTOFF = 6
+
+def find_similar_command_name(user_input: str) -> str:
+    if len(user_input) >= SIMILAR_COMMAND_LENGTH_CUTOFF:
+        return ''
+    distances = []
+    for command_name in commands:
+        dist = levenshtein_dist(user_input, command_name)
+        if dist < LEV_DIST_CUTOFF:
+            distances.append((command_name, dist))
+    if len(distances) == 0:
+        return ''
+    minimum = min(distances, key=lambda c:c[1])
+    if minimum[1] == 0:
+        return ''
+    return minimum[0]
 
 
 
@@ -277,10 +323,16 @@ def print_prompt() -> None:
 # main
 print_startup_message()
 last_response = ''
+messages = []
 while True:
-    messages = []
     while True:
         print_prompt(); message = input()
+
+        closest_command = find_similar_command_name(message)
+        if closest_command != '':
+            print(center_truecolor(f"That isn't a command. Did you mean \
+{truecolor_ify(closest_command, config['colors']['blue'])}?", TERM_WIDTH))
+            continue
 
         # TODO implement `save`, 
         # TODO implement `personality new`, `personality load` 
@@ -360,7 +412,7 @@ while True:
         collected_messages = []
         chunk_tokens = 0
 
-        start_time = time.time()
+        start_time = time()
         response = openai.ChatCompletion.create(
             model=DEFAULT_MODEL,
             messages=messages,
@@ -373,9 +425,9 @@ while True:
         print(f"{' ' * start_cursor}")
         for chunk in response:
 
-            chunk_time = time.time() - start_time  
+            chunk_time = time() - start_time  
             collected_chunks.append(chunk)  
-            chunk_delta = json.loads(f"{chunk['choices'][0]['delta']}")
+            chunk_delta = loads(f"{chunk['choices'][0]['delta']}")
 
             chunk_tokens = 0
             cursor = start_cursor
@@ -401,4 +453,6 @@ while True:
         messages.append({"role": "assistant", "content": message})
         session_token_usage["completion_tokens"] += chunk_tokens
         print('\n\n', end='')
+
+# TODO save out messages to a file for openai tools fine_tune.prepare_data -f <file_name>
 
