@@ -1,21 +1,18 @@
 #!/usr/bin/python3
 
-# Refererence URL
-# https://github.com/openai/openai-cookbook/blob/main/examples/How_to_stream_completions.ipynb
-
-# Example of an OpenAI ChatCompletion request with stream=True
-# https://platform.openai.com/docs/guides/chat': '
-
 import os
 import sys
 import subprocess
-from pathlib import Path
 import time
+import math
 import json
-from shutil import get_terminal_size
+import re
 from typing import List
 
+from pathlib import Path  # for xdg
+
 import openai
+
 
 APP_NAME = 'simple-chat'
 
@@ -28,11 +25,8 @@ YELLOW = '\033[33m'
 BLUE = '\033[34m'
 
 # store terminal width for text justification
-TERM_WIDTH = get_terminal_size().columns
-if TERM_WIDTH > 120:
-    TERM_WIDTH = 120
-if TERM_WIDTH < 40:
-    TERM_WIDTH = 40
+TERM_WIDTH = 80
+
 
 # write ansi colored terminal output
 def write_colored_output(output, color, end='\n') -> None:
@@ -47,9 +41,74 @@ def hex_to_truecolor_ansi(color) -> str:
 def truecolor_ify(string_to_print, color) -> str:
     return hex_to_truecolor_ansi(color) + string_to_print + '\x1b[0m'
 
+truecolor_pattern = re.compile(r'\x1b\[([\d;]*)([A-Za-z])')
+def len_truecolor(string: str) -> int:
+    return len(truecolor_pattern.sub('', string))
+
 # write truecolor ansi colored terminal output
 def write_truecolor_output(output, color, end='\n') -> None:
     sys.stdout.write(hex_to_truecolor_ansi(color) + output + '\x1b[0m' + end)
+
+def center_truecolor(string: str, width=TERM_WIDTH):
+    length = len_truecolor(string)
+    if length >= width:
+        return string
+    padding = ' ' * math.floor((width - len_truecolor(string)) / 2)
+    return padding + string + padding
+
+def rjust_truecolor(string: str, width=TERM_WIDTH):
+    length = len_truecolor(string)
+    if length >= width:
+        return string
+    return (' ' * math.floor((width - len_truecolor(string)))) + string
+
+def split_string_into_len_n_substrings(input_string: str, n: int) -> List[str]:
+    return [input_string[i:i+n] for i in range(0, len(input_string), n)]
+
+def wrap_text(text: str, width_box: (int, int), pos: (int)) -> List[str]:
+    wrapped_text = []
+    words = text.split(' ')
+    if len(words) == 1:
+        return words
+    line = words[0]
+    begin = pos
+    start_x, end_x = width_box
+    max_width = end_x - start_x
+    for word in words[1:]:
+        if len(line) + len(word) < max_width:
+            line += ' ' + word
+        else:
+            if len(wrapped_text) == 0:
+                begin = start_x
+            wrapped_text.append(line)
+            line = word
+    wrapped_text.append(line)
+    wrapped_text = [line for line in wrapped_text if line != '']
+    return wrapped_text
+
+def wrap_truecolor_text(text: str, width_box: (int, int), pos: (int)) -> List[str]:
+    wrapped_text = []
+    words = text.split(' ')
+    if len(words) == 1:
+        return words
+    line = words[0]
+    begin = pos
+    start_x, end_x = width_box
+    max_width = end_x - start_x
+    for word in words[1:]:
+        if len_truecolor(line) + len_truecolor(word) < max_width:
+            line += ' ' + word
+        else:
+            if len(wrapped_text) == 0:
+                begin = start_x
+            wrapped_text.append(line)
+            line = word
+    wrapped_text.append(line)
+    wrapped_text = [line for line in wrapped_text if line != '']
+    return wrapped_text
+
+
+
 
 
 
@@ -59,6 +118,9 @@ def set_clipboard_text(text) -> None:
     p.stdin.write(text.encode('utf-8'))
     p.stdin.close()
     p.wait()
+
+
+
 
 
 
@@ -78,13 +140,6 @@ def get_data_dir() -> str:
 
 
 
-def append_user_message(message):
-    global messages
-    messages.append({"role": "user", "content": message})
-
-def append_assistant_message(message):
-    global messages
-    messages.append({"role": "assistant", "content": message})
 
 
 
@@ -113,8 +168,6 @@ def save_prompt(prompt, prompt_name, prompts_dir) -> None:
             prompt_file.write(prompt)
     except IOError:
         print(f"Couldn't write to {prompt_path}.")
-
-
 
 
 
@@ -158,6 +211,7 @@ def account_token_usage(request_token_usage) -> None:
 
 
 
+
 config_file_name = 'config.json'
 config = load_config(get_config_dir() + '/config.json')
 
@@ -173,49 +227,70 @@ session_token_usage = { "completion_tokens": 0, "prompt_tokens": 0, "total_token
 prompt = "After being given a google search query, you will provide raw markdown that resembles the first 5 results. If provided a number, give the url of that search result."
 prompt_names = load_prompt_names(get_data_dir() + '/prompts/')
 
-
 def list_saved_prompts() -> None:
     for i, name in enumerate(prompt_names):
         print(f"\t{i+1}. {name}")
 
-# TODO write custom `center`, `ljust`, and `rjust` functions that ignore truecolor ansi color codes
+
+
+
+commands = {'exit': 'exit simple-chat-gpt-cli', 
+            'help': 'display the message you are currently reading.',
+            'clip': 'store the contents of the last chat completion in the clipboard.', 
+            'prompt new': 'create a new prompt and begin using it.', 
+            'prompt list': f"list the saved prompts located in your {truecolor_ify('prompts_dir', config['colors']['green'])}", 
+            'prompt load': f"load a saved prompt from your {truecolor_ify('prompts_dir', config['colors']['green'])}" }
+
+
+
 
 def print_startup_message() -> None:
-    print('\tWelcome to simple-chat-gpt-cli')
-    print(f"\ttype {truecolor_ify('exit', config['colors']['blue'])} to exit, or \
-{truecolor_ify('help', config['colors']['blue'])} for a list of commands")
-    #    print('Welcome to simple-chat-gpt-cli'.center(TERM_WIDTH))
-    #    print(f"type {truecolor_ify('exit', config['colors']['blue'])} to exit, or \
-    #{truecolor_ify('help', config['colors']['blue'])} for a list of commands".center(TERM_WIDTH))
+    print(flush=True)
+    print('Welcome to simple-chat-gpt-cli'.center(TERM_WIDTH))
+    print(center_truecolor(f"\ttype {truecolor_ify('exit', config['colors']['blue'])} to exit, or \
+{truecolor_ify('help', config['colors']['blue'])} for a list of commands"))
+    print(flush=True)
 
-commands = ['exit', 'clip', 'prompt new', 'prompt list', 'prompt load']
-command_usages = ['exit simple-chat-gpt-cli', 
-                  'store the contents of the last chat completion in the clipboard', 
-                  'create a new prompt and begin using it.', 
-                  f"list the saved prompts located in your truecolor_ify(prompts_dir, config['colors']['green']",
-                  "load a saved prompt from your truecolor_ify(prompts_dir, config['colors']['green']"]
+def print_command_usage(command_name: str, usage_info: int) -> None:
+    colored_command = truecolor_ify(command_name, config['colors']['blue'])
+    half_term_width = int(TERM_WIDTH / 2)
+    usage_split = wrap_truecolor_text(usage_info, (half_term_width + 1, TERM_WIDTH - int(TERM_WIDTH * 0.1)), half_term_width + 1)
+    print(rjust_truecolor(colored_command, width=(half_term_width - 1)), end='')
+    print(f"  {usage_split[0]}")
+    if len(usage_split) == 0:
+        return
+    for s in usage_split[1:]:
+        print(f"{' ' * (half_term_width + 1)}{s}")
 
-def print_command_usage(command_name, usage_info):
-    print('\t', end='')
-    write_truecolor_output(command_name, config["colors"]["blue"], end='')
-    print(f": {usage_info}")
+def print_help_message() -> None:
+    command_name_total_space = int(TERM_WIDTH * 0.35)
+    for command_name in commands:
+        colored_command = truecolor_ify(command_name, config['colors']['blue'])
+        usage_split = wrap_truecolor_text(commands[command_name], 
+                                (command_name_total_space + 2, TERM_WIDTH), 
+                                command_name_total_space + 2)
+        print(rjust_truecolor(colored_command, width=(command_name_total_space)), end='')
+        print(f"  {usage_split[0]}")
+        if len(usage_split) == 0:
+            return
+        for s in usage_split[1:]:
+            print(f"{' ' * (command_name_total_space + 2)}{s}")
+    print(flush=True)
 
-def print_commands() -> None:
-    print("Commands:")
-    print_command_usage('exit', 'exit simple-chat-gpt-cli')
-    print_command_usage('clip', 'store the contents of the last chat completion in the clipboard')
-    print_command_usage('prompt new', 'create a new prompt and begin using it.')
-    print_command_usage('prompt list', 'list the saved prompts located in your `prompts_dir`')
-    print_command_usage('prompt load', 'load a saved prompt from your `prompts_dir`')
+def print_prompt() -> None:
+    print(f"{truecolor_ify('   >>> ', config['colors']['yellow'])}", end='')
 
+
+
+
+
+# main
 print_startup_message()
-
 last_response = ''
 while True:
     messages = []
     while True:
-        write_truecolor_output("> ", config["colors"]["yellow"], end='')
-        message = input()
+        print_prompt(); message = input()
 
         # TODO implement `help`, 
         # TODO implement `save`, 
@@ -224,65 +299,66 @@ while True:
         # TODO implement `clip code [n]`
         if message == 'exit':
             account_token_usage(session_token_usage)
+            print(flush=True)
             sys.exit(0)
         elif message == 'help':
-            print_commands()
+            print_help_message()
             continue
         elif message == 'clip':
-            if last_response is None:
-                print('Must provide an initial message before you can `clip`')
+            if last_response == '':
+                print(center_truecolor(f"Must provide an initial message before you can \
+{truecolor_ify('clip', config['colors']['blue'])}", TERM_WIDTH))
                 continue
             set_clipboard_text(last_response)
             continue
         elif message == 'prompt new':
             if last_response != '':
-                print('Are you sure you want to leave the current personality? y/n')
-                write_colored_output("> ", YELLOW, end='')
-                are_you_sure = input()
-                if are_you_sure != 'y':
+                print('Are you sure you want to leave the current personality? y/n'.center(TERM_WIDTH))
+                print_prompt(); are_you_sure = input()
+                if are_you_sure not in ['y', 'yes']:
                     continue
                 messages = []
-            print('Enter your prompt: ')
-            write_colored_output("> ", YELLOW, end='')
-            prompt = input()
-            print('Would you like to save this prompt for future use?')
-            write_colored_output("> ", YELLOW, end='')
-            are_you_sure = input()
-            if are_you_sure == 'y':
+            print('Enter your prompt:'.center(TERM_WIDTH)); print(flush=True)
+            print_prompt(); prompt = input()
+            print('Would you like to save this prompt for future use?'.center(TERM_WIDTH))
+            print_prompt(); are_you_sure = input()
+            if are_you_sure in ['y', 'yes']:
                 while True:
-                    print('What would you like to name this prompt?')
-                    write_colored_output("> ", YELLOW, end='')
-                    prompt_name = input()
+                    print('What would you like to name this prompt?'.center(TERM_WIDTH))
+                    print_prompt(); prompt_name = input()
                     if prompt_name in prompt_names:
-                        print('There is already a prompt with that name. Do you want to overwrite it?')
-                        write_colored_output("> ", YELLOW, end='')
-                        are_you_sure = input()
-                        if are_you_sure != 'y':
-                            print('Not saving prompt.')
+                        print('There is already a prompt with that name. Do you want to overwrite it?'.center(TERM_WIDTH))
+                        print_prompt(); are_you_sure = input()
+                        if are_you_sure not in ['y', 'yes']:
+                            print('Not saving prompt.'.center(TERM_WIDTH))
                             break
                     save_prompt(prompt, prompt_name, get_data_dir() + '/prompts/')
                     break
             messages.append({"role": "system", "content": prompt})
             continue
         elif message == 'prompt list':
-            print("Saved prompts:")
+            print(flush=True)
+            print("Saved prompts:".center(TERM_WIDTH))
+            print(flush=True)
             list_saved_prompts()
+            print(flush=True)
             continue
         elif message == 'prompt load':
             if last_response != '':
-                print('Are you sure you want to leave the current personality? y/n')
-                write_colored_output("> ", YELLOW, end='')
-                are_you_sure = input()
-                if are_you_sure != 'y':
+                print('Are you sure you want to leave the current personality? y/n'.center(TERM_WIDTH))
+                print_prompt(); are_you_sure = input()
+                if are_you_sure not in ['y', 'yes']:
                     continue
                 messages = []
-            print("Select from saved prompts (enter desired number): ")
+            print(flush=True)
+            print("Select from saved prompts (enter desired number): ".center(TERM_WIDTH))
+            print(flush=True)
             list_saved_prompts()
+            print(flush=True)
             while True:
-                write_colored_output("> ", YELLOW, end='')
-                selected_prompt_n = input()
+                print_prompt(); selected_prompt_n = input()
                 if not selected_prompt_n.isdigit():
-                    print("Must enter number of desired prompt.")
+                    print("Must enter number of desired prompt.".center(TERM_WIDTH))
                     continue
                 selected_prompt_name = prompt_names[int(selected_prompt_n) - 1]
                 prompt = load_prompt(selected_prompt_name, get_data_dir() + '/prompts/')
@@ -290,7 +366,7 @@ while True:
                 break
             continue
 
-        append_user_message(message)
+        messages.append({"role": "user", "content": message})
 
         collected_chunks = []
         collected_messages = []
@@ -303,24 +379,38 @@ while True:
             temperature=0,
             stream=True)
 
+        start_cursor = int(TERM_WIDTH * 0.2)
+        end_cursor = TERM_WIDTH - int(TERM_WIDTH * 0.25)
+
+        print(f"{' ' * start_cursor}")
         for chunk in response:
 
-            chunk_time = time.time() - start_time  # calculate the time delay of the chunk
-            collected_chunks.append(chunk)  # save the event response
+            chunk_time = time.time() - start_time  
+            collected_chunks.append(chunk)  
             chunk_delta = json.loads(f"{chunk['choices'][0]['delta']}")
 
             chunk_tokens = 0
-
+            cursor = start_cursor
             if "role" in chunk_delta:
                 continue
             elif "content" in chunk_delta:
                 chunk_message = chunk_delta["content"]
-                collected_messages.append(chunk_message)  # save the message
+                collected_messages.append(chunk_message)  
+
+                # TODO padding on either side of chat completion response not working
+                if ' ' in chunk_message and cursor > end_cursor:
+                    print(chunk_message, flush=True)
+                    if cursor != start_cursor:
+                        print("\n", flush=True)
+                    print(f"{' ' * start_cursor}", flush=True)
+                    cursor = start_cursor
+                cursor += len(chunk_message)
+
                 chunk_tokens += 1
                 print(chunk_message, end='', flush=True)
             last_response = ''.join(collected_messages)
-        
-        append_assistant_message(message)
+
+        messages.append({"role": "assistant", "content": message})
         session_token_usage["completion_tokens"] += chunk_tokens
-        print()
+        print('\n\n', end='')
 
