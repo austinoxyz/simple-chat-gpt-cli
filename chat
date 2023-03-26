@@ -6,7 +6,9 @@ import sys
 import re
 import openai
 
-from os import getenv, listdir, path
+from os import getenv, listdir
+from os.path import join
+
 from subprocess import Popen, PIPE
 from time import time
 from math import floor
@@ -73,7 +75,7 @@ def load_config(config_file_name):
         config['model'] = DEFAULT_MODEL
 
     if 'prompts_dir' not in config:
-        config['prompts_dir'] = get_xdg_data_dir() + '/prompts/'
+        config['prompts_dir'] = get_xdg_data_dir() + 'prompts/'
     else:
         if config['prompts_dir'][-1:] == '/':
             config['prompts_dir'] = get_xdg_data_dir() + config['prompts_dir'][:-1]
@@ -249,8 +251,7 @@ def load_prompt(prompt_name, prompts_dir) -> str:
 
 def save_prompt(prompt, prompt_name, prompts_dir) -> None:
     prompt_file_name = prompt_name + '.prompt'
-    prompt_path = os.path.join(prompts_dir, prompt_file_name)
-    print(f'Saving to {prompt_path}')
+    prompt_path = join(prompts_dir, prompt_file_name) # os.path.join
     try:
         with open(prompt_path, 'w') as prompt_file:
             prompt_file.write(prompt)
@@ -259,6 +260,8 @@ def save_prompt(prompt, prompt_name, prompts_dir) -> None:
         print(f": Couldn't write to ", end='', flush=True)
         write_colored_output(f"{prompt}", ANSI_GREEN, end='\n')
         print(f"Couldn't write to {prompt_path}.")
+    color_prompts_dir = truecolor_ify('$prompts_dir', CFG_COLOR)
+    print(f'\n   Saved to {color_prompts_dir}/{prompt_file_name}')
 
 
 
@@ -288,6 +291,8 @@ def account_token_usage(request_token_usage) -> None:
 
 
 
+
+
 config_file_name = 'config.json'
 config = load_config(get_xdg_config_dir() + '/config.json')
 
@@ -298,17 +303,21 @@ model = DEFAULT_MODEL
 token_usage = load_token_usage(config['token_usage_file'])
 session_token_usage = { "completion_tokens": 0, "prompt_tokens": 0, "total_tokens": 0 }
 
-prompt = "After being given a google search query, you will provide raw markdown that resembles the first 5 results. If provided a number, give the url of that search result."
-prompt_names = load_prompt_names(config['prompts_dir'])
+prompt = "After being given a google search query, you will provide raw markdown that resembles \
+the first 5 results. If provided a number, give the url of that search result."
 
+prompt_names = load_prompt_names(config['prompts_dir'])
 
 def list_saved_prompts() -> None:
     for i, name in enumerate(prompt_names):
         print(f"   {i+1}. {name}")
 
-
 CMD_COLOR = config['colors']['blue']
 CFG_COLOR = config['colors']['green']
+
+
+
+
 
 
 commands = {'exit': 'exit simple-chat-gpt-cli', 
@@ -317,6 +326,9 @@ commands = {'exit': 'exit simple-chat-gpt-cli',
             'prompt new': 'create a new prompt and begin using it.', 
             'prompt list': f"list the saved prompts located in your {truecolor_ify('prompts_dir', CFG_COLOR)}", 
             'prompt load': f"load a saved prompt from your {truecolor_ify('prompts_dir', CFG_COLOR)}" }
+
+def is_command(message: str) -> bool:
+    pass # TODO
 
 
 LEV_DIST_CUTOFF = 6
@@ -339,6 +351,9 @@ def find_similar_command_name(user_input: str) -> str:
     if minimum[1] == 0:
         return ''
     return minimum[0]
+
+
+
 
 
 
@@ -423,7 +438,8 @@ while True:
                     print('What would you like to name this prompt?'.center(TERM_WIDTH))
                     print_prompt(); prompt_name = input()
                     if prompt_name in prompt_names:
-                        print('There is already a prompt with that name. Do you want to overwrite it?'.center(TERM_WIDTH))
+                        print('There is already a prompt with that name. Do you want to overwrite it?'
+                              .center(TERM_WIDTH))
                         print_prompt(); are_you_sure = input()
                         if are_you_sure not in ['y', 'yes']:
                             print('Not saving prompt.'.center(TERM_WIDTH))
