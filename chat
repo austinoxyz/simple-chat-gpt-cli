@@ -16,25 +16,81 @@ from numpy import zeros, uint32
 from pathlib import Path  # for xdg
 
 
+# write ansi colored terminal output
+def write_colored_output(output, color, end='\n') -> None:
+    sys.stdout.write(color + output + '\033[0m' + end)
 
 
 APP_NAME = 'simple-chat'
 
 DEFAULT_MODEL = 'gpt-3.5-turbo'
 
+DEFAULT_COLORS = {
+    "black":   "#bdae93",
+    "red":     "#9d0006",
+    "green":   "#79740e",
+    "yellow":  "#b57614",
+    "blue":    "#076678",
+    "magenta": "#8f3f71",
+    "cyan":    "#427b58",
+    "white":   "#ffffff"
+}
+
 # ansi color sequences
-RED = '\033[31m'
-GREEN = '\033[32m'
-YELLOW = '\033[33m'
-BLUE = '\033[34m'
+ANSI_RED = '\033[31m'
+ANSI_GREEN = '\033[32m'
+ANSI_YELLOW = '\033[33m'
+ANSI_BLUE = '\033[34m'
 
 # store terminal width for text justification
 TERM_WIDTH = 80
 
+REQUIRED_CONFIG_OPTIONS = ['api_key_file']
+def load_config(config_file_name):
+    try:
+        json_raw = ''
+        with open(config_file_name, 'r') as config_file:
+            json_raw += config_file.read()
+        config = loads(json_raw)
+    except IOError:
+        write_colored_output("CONFIG ERROR", ANSI_RED, end='')
+        print(f": Couldn't read config file.", end='', flush=True)
+        sys.exit(1)
+    except JSONDecodeError:
+        print(f"Malformed json in {config_file_name}:")
+        import traceback
+        print(traceback.format_exc())
 
-# write ansi colored terminal output
-def write_colored_output(output, color, end='\n') -> None:
-    sys.stdout.write(color + output + '\033[0m' + end)
+    for config_key in REQUIRED_CONFIG_OPTIONS:
+        if config_key not in config:
+            write_colored_output("CONFIG ERROR", ANSI_RED, end='')
+            print(f": Must include ", end='', flush=True)
+            write_colored_output(f"{config_key}", ANSI_GREEN, end='')
+            print(" in config file.", flush=True)
+            sys.exit(1)
+
+    if 'model' not in config:
+        config['model'] = DEFAULT_MODEL
+
+    if 'prompts_dir' not in config:
+        config['prompts_dir'] = get_xdg_data_dir() + '/prompts/'
+    else:
+        if config['prompts_dir'][-1:] == '/':
+            config['prompts_dir'] = get_xdg_data_dir() + config['prompts_dir'][:-1]
+        else:
+            config['prompts_dir'] = get_xdg_data_dir() + config['prompts_dir']
+    
+    if 'token_usage_file' not in config:
+        config['token_usage_file'] = get_xdg_data_dir() + 'token_usage.json'
+    else:
+        config['token_usage_file'] = get_xdg_data_dir() + config['token_usage_file']
+
+    if 'colors' not in config:
+        config['colors'] = DEFAULT_COLORS
+
+    return config
+
+
 
 def hex_to_truecolor_ansi(color) -> str:
     r = int(color[1:3], base=16)
@@ -112,10 +168,6 @@ def wrap_truecolor_text(text: str, width_box: (int, int), pos: (int)) -> List[st
     return wrapped_text
 
 
-
-
-
-
 # use xclip to put the last chat completion in the clipboard
 def set_clipboard_text(text) -> None:
     p = Popen(['xclip', '-selection', 'clipboard'], stdin=PIPE)
@@ -128,18 +180,17 @@ def set_clipboard_text(text) -> None:
 
 
 
-## XDG stuff
-def get_config_dir() -> str:
+def get_xdg_config_dir() -> str:
     config_dir = getenv('XDG_CONFIG_HOME', '')
     if config_dir == '' or config_dir[0] != '/':
         return str(Path.home().joinpath('.config', APP_NAME))
     return str(Path(config_dir).joinpath(APP_NAME))
 
-def get_data_dir() -> str:
+def get_xdg_data_dir() -> str:
     data_dir = getenv('XDG_DATA_HOME', '')
     if data_dir == '' or data_dir[0] != '/':
-        return str(Path.home().joinpath('.local/share', APP_NAME))
-    return str(Path(data_dir).joinpath(APP_NAME))
+        return str(Path.home().joinpath('.local/share', APP_NAME)) + '/'
+    return str(Path(data_dir).joinpath(APP_NAME)) + '/'
 
 
 
@@ -170,9 +221,17 @@ def levenshtein_dist(s1: str, s2: str) -> int:
 
 
 
-
 def load_prompt_names(prompts_dir) -> List[str]:
-    return [filename[:-7] for filename in listdir(prompts_dir) if filename.endswith('.prompt')]
+    res = []
+    try:
+        res = [filename[:-7] for filename in listdir(prompts_dir) if filename.endswith('.prompt')]
+    except FileNotFoundError:
+        write_colored_output("CONFIG ERROR", ANSI_RED, end='')
+        print(f": Couldn't find directory ", end='', flush=True)
+        write_colored_output(f"{prompts_dir}", ANSI_GREEN, end='\n')
+        sys.exit(1)
+    return res
+
 
 def load_prompt(prompt_name, prompts_dir) -> str:
     prompt_file_name = prompt_name + '.prompt'
@@ -181,9 +240,11 @@ def load_prompt(prompt_name, prompts_dir) -> str:
         with open(prompt_path, 'r') as prompt_file:
             prompt = prompt_file.read()
     except IOError:
-        print(f"Couldn't read {prompt_path}. Check your prompts_dir!")
+        write_colored_output("CONFIG ERROR", ANSI_RED, end='')
+        print(f": Couldn't read ", end='', flush=True)
+        write_colored_output(f"{prompt_path}", ANSI_GREEN, end='\n')
         sys.exit(1)
-    print(f'Loaded prompt at {prompt_path}')
+    print(f'\n   Loaded prompt at {prompt_path}')
     return prompt
 
 def save_prompt(prompt, prompt_name, prompts_dir) -> None:
@@ -194,40 +255,30 @@ def save_prompt(prompt, prompt_name, prompts_dir) -> None:
         with open(prompt_path, 'w') as prompt_file:
             prompt_file.write(prompt)
     except IOError:
+        write_colored_output("CONFIG ERROR", ANSI_RED, end='')
+        print(f": Couldn't write to ", end='', flush=True)
+        write_colored_output(f"{prompt}", ANSI_GREEN, end='\n')
         print(f"Couldn't write to {prompt_path}.")
 
 
 
-def load_config(config_file_name):
-    try:
-        json_raw = ''
-        with open(config_file_name, 'r') as config_file:
-            json_raw += config_file.read()
-        config = loads(json_raw)
-    except IOError:
-        print(f"Couldn't read {config_file_name}. Wheres your config?")
-        sys.exit(1)
-    except JSONDecodeError:
-        print(f"Malformed json in {config_file_name}:")
-        import traceback
-        print(traceback.format_exc())
-    return config
 
-def load_api_key(api_key_file_name) -> str:
-    try:
-        with open(api_key_file_name, 'r') as api_key_file:
-            key = api_key_file.readline()
-    except IOError:
-        print(f"Couldn't read {api_key_file_name}. Check your config!")
-        sys.exit(1)
-    return key
+
+
+
+
+
+
+
 
 def load_token_usage(token_usage_file_name):
     try:
         with open(token_usage_file_name, 'r') as token_usage_file:
             token_usage = loads(token_usage_file.readline())
     except IOError:
-        print(f"Couldn't read {token_usage_file_name}. Check your config!")
+        write_colored_output("CONFIG ERROR", ANSI_RED, end='')
+        print(f": Couldn't read ", end='', flush=True)
+        write_colored_output(f"{token_usage_file_name}", ANSI_GREEN, end='\n')
         sys.exit(1)
     return token_usage
 
@@ -237,41 +288,42 @@ def account_token_usage(request_token_usage) -> None:
 
 
 
-
-
 config_file_name = 'config.json'
-config = load_config(get_config_dir() + '/config.json')
+config = load_config(get_xdg_config_dir() + '/config.json')
 
 openai.api_key_path = config["api_key_file"]
 
 model = DEFAULT_MODEL
-if "model" in config:
-    model = config["model"]
 
-token_usage = load_token_usage(get_data_dir() + '/token_usage.json')
+token_usage = load_token_usage(config['token_usage_file'])
 session_token_usage = { "completion_tokens": 0, "prompt_tokens": 0, "total_tokens": 0 }
 
 prompt = "After being given a google search query, you will provide raw markdown that resembles the first 5 results. If provided a number, give the url of that search result."
-prompt_names = load_prompt_names(get_data_dir() + '/prompts/')
+prompt_names = load_prompt_names(config['prompts_dir'])
+
 
 def list_saved_prompts() -> None:
     for i, name in enumerate(prompt_names):
-        print(f"\t{i+1}. {name}")
+        print(f"   {i+1}. {name}")
 
 
+CMD_COLOR = config['colors']['blue']
+CFG_COLOR = config['colors']['green']
 
 
 commands = {'exit': 'exit simple-chat-gpt-cli', 
             'help': 'display the message you are currently reading.',
             'clip': 'store the contents of the last chat completion in the clipboard.', 
             'prompt new': 'create a new prompt and begin using it.', 
-            'prompt list': f"list the saved prompts located in your {truecolor_ify('prompts_dir', config['colors']['green'])}", 
-            'prompt load': f"load a saved prompt from your {truecolor_ify('prompts_dir', config['colors']['green'])}" }
+            'prompt list': f"list the saved prompts located in your {truecolor_ify('prompts_dir', CFG_COLOR)}", 
+            'prompt load': f"load a saved prompt from your {truecolor_ify('prompts_dir', CFG_COLOR)}" }
 
-LONGEST_COMMAND_NAME = max(commands.keys(), key=lambda k: len(k))
 
-SIMILAR_COMMAND_LENGTH_CUTOFF = int(len(LONGEST_COMMAND_NAME) * 1.5)
 LEV_DIST_CUTOFF = 6
+
+LONGEST_PROMPT_NAME = max([len(name) for name in prompt_names])
+LONGEST_COMMAND_NAME = max(commands.keys(), key=lambda k: len(k))
+SIMILAR_COMMAND_LENGTH_CUTOFF = len(LONGEST_COMMAND_NAME) + LONGEST_PROMPT_NAME
 
 def find_similar_command_name(user_input: str) -> str:
     if len(user_input) >= SIMILAR_COMMAND_LENGTH_CUTOFF:
@@ -293,15 +345,15 @@ def find_similar_command_name(user_input: str) -> str:
 def print_startup_message() -> None:
     print(flush=True)
     print('Welcome to simple-chat-gpt-cli'.center(TERM_WIDTH))
-    print(center_truecolor(f"\ttype {truecolor_ify('exit', config['colors']['blue'])} to exit, or \
-{truecolor_ify('help', config['colors']['blue'])} for a list of commands"))
+    print(center_truecolor(f"\ttype {truecolor_ify('exit', CMD_COLOR)} to exit, or \
+{truecolor_ify('help', CMD_COLOR)} for a list of commands"))
     print(flush=True)
 
 
 def print_help_message() -> None:
     command_name_total_space = int(TERM_WIDTH * 0.35)
     for command_name in commands:
-        colored_command = truecolor_ify(command_name, config['colors']['blue'])
+        colored_command = truecolor_ify(command_name, CMD_COLOR)
         usage_split = wrap_truecolor_text(commands[command_name], 
                                 (command_name_total_space + 2, TERM_WIDTH), 
                                 command_name_total_space + 2)
@@ -326,12 +378,16 @@ last_response = ''
 messages = []
 while True:
     while True:
+
+        # FIXME: Pasting in messages with newlines breaks this
         print_prompt(); message = input()
+        if message == '':
+            continue 
+
 
         closest_command = find_similar_command_name(message)
         if closest_command != '':
-            print(center_truecolor(f"That isn't a command. Did you mean \
-{truecolor_ify(closest_command, config['colors']['blue'])}?", TERM_WIDTH))
+            print(center_truecolor(f"Did you mean {truecolor_ify(closest_command, CMD_COLOR)}?", TERM_WIDTH))
             continue
 
         # TODO implement `save`, 
@@ -347,7 +403,7 @@ while True:
         elif message == 'clip':
             if last_response == '':
                 print(center_truecolor(f"Must provide an initial message before you can \
-{truecolor_ify('clip', config['colors']['blue'])}", TERM_WIDTH))
+{truecolor_ify('clip', CMD_COLOR)}", TERM_WIDTH))
                 continue
             set_clipboard_text(last_response)
             continue
@@ -372,26 +428,30 @@ while True:
                         if are_you_sure not in ['y', 'yes']:
                             print('Not saving prompt.'.center(TERM_WIDTH))
                             break
-                    save_prompt(prompt, prompt_name, get_data_dir() + '/prompts/')
+                    save_prompt(prompt, prompt_name, config['prompts_dir'])
                     break
             messages.append({"role": "system", "content": prompt})
             continue
         elif message == 'prompt list':
-            print(flush=True)
-            print("Saved prompts:".center(TERM_WIDTH))
+            if len(prompt_names) == 0:
+                print(f"", end='', flush=True)
+                print(center_truecolor(f"\n   No prompts located in \
+{truecolor_ify(config['prompts_dir'], CFG_COLOR)}", TERM_WIDTH))
+                continue
             print(flush=True)
             list_saved_prompts()
             print(flush=True)
             continue
         elif message == 'prompt load':
+            if len(prompt_names) == 0:
+                print("\n   No prompts")
+                continue
             if last_response != '':
                 print('Are you sure you want to leave the current personality? y/n'.center(TERM_WIDTH))
                 print_prompt(); are_you_sure = input()
                 if are_you_sure not in ['y', 'yes']:
                     continue
                 messages = []
-            print(flush=True)
-            print("Select from saved prompts (enter desired number): ".center(TERM_WIDTH))
             print(flush=True)
             list_saved_prompts()
             print(flush=True)
@@ -401,7 +461,7 @@ while True:
                     print("Must enter number of desired prompt.".center(TERM_WIDTH))
                     continue
                 selected_prompt_name = prompt_names[int(selected_prompt_n) - 1]
-                prompt = load_prompt(selected_prompt_name, get_data_dir() + '/prompts/')
+                prompt = load_prompt(selected_prompt_name, config['prompts_dir'])
                 messages.append({"role": "system", "content": prompt})
                 break
             continue
@@ -414,7 +474,7 @@ while True:
 
         start_time = time()
         response = openai.ChatCompletion.create(
-            model=DEFAULT_MODEL,
+            model=config['model'],
             messages=messages,
             temperature=0,
             stream=True)
