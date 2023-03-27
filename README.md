@@ -1,13 +1,13 @@
-### Simple Chat GPT CLI
+# Simple Chat GPT CLI
 
-## A simple CLI tool to use Chat GPT Chat Completions in the terminal
+> A simple CLI tool to use Chat GPT Chat Completions in the terminal
 
-# Capabilities
+### Capabilities
 > 1. Save and switch between prompts.
 > 2. Save and switch between chats.
 > 3. Store the contents of the last response in the clipboard using `xclip`.
 
-# Configuration
+### Configuration
 > Only the `openai_key_file` config option is required.
 > See `example_config.json` for available configuration options.
 
