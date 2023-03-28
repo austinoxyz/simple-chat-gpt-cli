@@ -15,11 +15,11 @@ from numpy import zeros, uint32
 
 from pathlib import Path  # for xdg
 
-# ansi color sequences
+APP_NAME = 'simple-chat'
+
+# for error messages on startup before config has been read
 ANSI_RED = '\033[31m'
 ANSI_GREEN = '\033[32m'
-ANSI_YELLOW = '\033[33m'
-ANSI_BLUE = '\033[34m'
 
 # write ansi colored terminal output
 def write_colored_output(output, color, end='\n') -> None:
@@ -28,19 +28,17 @@ def write_colored_output(output, color, end='\n') -> None:
 
 
 
-APP_NAME = 'simple-chat'
+# implicit $HOME before these locations
+DEFAULT_XDG_LOCATIONS = {
+    'XDG_CONFIG_HOME': '.config',
+    'XDG_DATA_HOME':   '.local/share' }
 
-def get_xdg_config_dir() -> str:
-    config_dir = getenv('XDG_CONFIG_HOME', '')
-    if config_dir == '' or config_dir[0] != '/':
-        return str(Path.home().joinpath('.config', APP_NAME))
-    return str(Path(config_dir).joinpath(APP_NAME))
-
-def get_xdg_data_dir() -> str:
-    data_dir = getenv('XDG_DATA_HOME', '')
-    if data_dir == '' or data_dir[0] != '/':
-        return str(Path.home().joinpath('.local/share', APP_NAME)) + '/'
-    return str(Path(data_dir).joinpath(APP_NAME)) + '/'
+def get_xdg_dir(xdg_env_var: str) -> str:
+    xdg_dir = getenv('XDG_CONFIG_HOME', '')
+    if xdg_dir == '' or xdg_dir[0] != '/':
+        default_loc = DEFAULT_XDG_LOCATIONS[xdg_env_var]
+        return str(Path.home().joinpath(default_loc, APP_NAME)) + '/'
+    return str(Path(xdg_dir).joinpath(APP_NAME)) + '/'
 
 
 
@@ -51,9 +49,9 @@ TERM_WIDTH = 80
 REQUIRED_CONFIG_OPTIONS = ['api_key_file']
 DEFAULT_CONFIG_OPTIONS = {
     'model': 'gpt-3.5-turbo',
-    'prompts_dir': f"{get_xdg_data_dir()}prompts",
-    'chats_dir': f"{get_xdg_data_dir()}chats",
-    'token_usage_file': f"{get_xdg_data_dir()}token_usage.json",
+    'prompts_dir': f"{get_xdg_dir('XDG_DATA_HOME')}prompts",
+    'chats_dir': f"{get_xdg_dir('XDG_DATA_HOME')}chats",
+    'token_usage_file': f"{get_xdg_dir('XDG_DATA_HOME')}token_usage.json",
     'colors': {
         "black":   "#bdae93",
         "red":     "#9d0006",
@@ -66,7 +64,7 @@ DEFAULT_CONFIG_OPTIONS = {
     }
 }
 
-def load_config(config_file_name):
+def load_config(config_file_name: str) -> dict[str, any]:
     config = {}
     try:
         json_raw = ''
@@ -98,24 +96,24 @@ def load_config(config_file_name):
     else:
         if config['prompts_dir'][0] != '/':
             if config['prompts_dir'][-1:] == '/':
-                config['prompts_dir'] = get_xdg_data_dir() + config['prompts_dir'][:-1]
+                config['prompts_dir'] = get_xdg_dir('XDG_DATA_HOME') + config['prompts_dir'][:-1]
             else:
-                config['prompts_dir'] = get_xdg_data_dir() + config['prompts_dir']
+                config['prompts_dir'] = get_xdg_dir('XDG_DATA_HOME') + config['prompts_dir']
 
     if 'chats_dir' not in config:
         config['chats_dir'] = DEFAULT_CONFIG_OPTIONS['chats_dir']
     else:
         if config['chats_dir'][0] != '/':
             if config['chats_dir'][-1:] == '/':
-                config['chats_dir'] = get_xdg_data_dir() + config['chats_dir'][:-1]
+                config['chats_dir'] = get_xdg_dir('XDG_DATA_HOME') + config['chats_dir'][:-1]
             else:
-                config['chats_dir'] = get_xdg_data_dir() + config['chats_dir']
+                config['chats_dir'] = get_xdg_dir('XDG_DATA_HOME') + config['chats_dir']
     
     if 'token_usage_file' not in config:
-        config['token_usage_file'] = get_xdg_data_dir() + 'token_usage.json'
+        config['token_usage_file'] = get_xdg_dir('XDG_DATA_HOME') + 'token_usage.json'
     else:
         if config['token_usage'][0] != '/':
-            config['token_usage_file'] = get_xdg_data_dir() + config['token_usage_file']
+            config['token_usage_file'] = get_xdg_dir('XDG_DATA_HOME') + config['token_usage_file']
 
     if 'colors' not in config:
         config['colors'] = DEFAULT_CONFIG_OPTIONS['colors']
@@ -124,35 +122,31 @@ def load_config(config_file_name):
 
 
 
-def hex_to_truecolor_ansi(color) -> str:
+def convert_hex_to_truecolor_ansi(color: str) -> str:
     r = int(color[1:3], base=16)
     g = int(color[3:5], base=16)
     b = int(color[5:7], base=16)
     return f"\x1b[38;2;{r};{g};{b}m"
 
-def truecolor_ify(string_to_print, color) -> str:
-    return hex_to_truecolor_ansi(color) + string_to_print + '\x1b[0m'
+def truecolor_ify(msg_to_print: str, color: str) -> str:
+    return convert_hex_to_truecolor_ansi(color) + msg_to_print + '\x1b[0m'
 
 truecolor_pattern = re.compile(r'\x1b\[([\d;]*)([A-Za-z])')
-def len_truecolor(string: str) -> int:
-    return len(truecolor_pattern.sub('', string))
+def len_truecolor(truecolor_string: str) -> int:
+    return len(truecolor_pattern.sub('', truecolor_string))
 
-# write truecolor ansi colored terminal output
-def write_truecolor_output(output, color, end='\n') -> None:
-    sys.stdout.write(hex_to_truecolor_ansi(color) + output + '\x1b[0m' + end)
-
-def center_truecolor(string: str, width=TERM_WIDTH):
-    length = len_truecolor(string)
+def center_truecolor(truecolor_string: str, width=TERM_WIDTH):
+    length = len_truecolor(truecolor_string)
     if length >= width:
-        return string
-    padding = ' ' * floor((width - len_truecolor(string)) / 2)
-    return padding + string + padding
+        return truecolor_string
+    padding = ' ' * floor((width - len_truecolor(truecolor_string)) / 2)
+    return padding + truecolor_string + padding
 
-def rjust_truecolor(string: str, width=TERM_WIDTH):
-    length = len_truecolor(string)
+def rjust_truecolor(truecolor_string: str, width=TERM_WIDTH):
+    length = len_truecolor(truecolor_string)
     if length >= width:
-        return string
-    return (' ' * (width - len_truecolor(string))) + string
+        return truecolor_string
+    return (' ' * (width - len_truecolor(truecolor_string))) + truecolor_string
 
 def split_string_into_len_n_substrings(input_string: str, n: int) -> list[str]:
     return [input_string[i:i+n] for i in range(0, len(input_string), n)]
@@ -181,7 +175,7 @@ def wrap_truecolor_text(text: str, width_box: (int, int), pos: (int)) -> list[st
 
 
 # use xclip to put the last chat completion in the clipboard
-def set_clipboard_text(text) -> None:
+def set_clipboard_text(text: str) -> None:
     p = Popen(['xclip', '-selection', 'clipboard'], stdin=PIPE)
     p.stdin.write(text.encode('utf-8'))
     p.stdin.close()
@@ -311,7 +305,7 @@ def save_chat(messages: list[dict[str, str]], chat_name: str) -> None:
 
 
 
-def load_token_usage(token_usage_file_name):
+def load_token_usage(token_usage_file_name: str) -> dict[str, int]:
     token_usage = {}  # to trick cython
     try:
         with open(token_usage_file_name, 'r') as token_usage_file:
@@ -323,7 +317,7 @@ def load_token_usage(token_usage_file_name):
         sys.exit(1)
     return token_usage
 
-def account_token_usage(request_token_usage) -> None:
+def account_token_usage(request_token_usage: dict[str, int]) -> None:
     pass
 
 
@@ -332,7 +326,7 @@ def account_token_usage(request_token_usage) -> None:
 
 
 config_file_name = 'config.json'
-config = load_config(get_xdg_config_dir() + '/config.json')
+config = load_config(get_xdg_dir('XDG_CONFIG_HOME') + '/config.json')
 
 openai.api_key_path = config["api_key_file"]
 
@@ -367,8 +361,8 @@ commands = { 'exit':         "exit simple-chat-gpt-cli",
              'prompt load': f"load a saved prompt from your {truecolor_ify('prompts_dir', CFG_COLOR)}",
              'save':         "save the current chat history.",
              'chat new':     "begin a new chat",
-             'chat list':    f"list the saved chats located in your {truecolor_ify('chats_dir', CFG_COLOR)}", 
-             'chat load':    f"load a saved chat from your {truecolor_ify('chats_dir', CFG_COLOR)}" }
+             'chat list':   f"list the saved chats located in your {truecolor_ify('chats_dir', CFG_COLOR)}", 
+             'chat load':   f"load a saved chat from your {truecolor_ify('chats_dir', CFG_COLOR)}" }
 
 MOST_WORDS_IN_COMMAND = max([len(cmd_name.split(' ')) for cmd_name in commands.keys()])
 
@@ -470,7 +464,7 @@ def confirm() -> bool:
     return are_you_sure in ['y', 'yes']
 
 
-def apply_prompt(messages: list[dict[str, str]], prompt: str) -> list[dict[str, str]]:
+def apply_prompt_to_messages(messages: list[dict[str, str]], prompt: str) -> list[dict[str, str]]:
     for i, message in enumerate(messages):
         if message['role'] == 'system':
             messages[i]['content'] = prompt
@@ -525,7 +519,7 @@ while True:
                 print_cli_prompt()
                 prompt = input()
                 ask_save_prompt()
-                messages = apply_prompt(messages, prompt)
+                messages = apply_prompt_to_messages(messages, prompt)
                 print(f"\n   Prompt applied to {chat_type} chat.")
                 continue
             elif split_message[1] == 'list':
@@ -547,7 +541,7 @@ while True:
                 selected_prompt_n = ask_selection()
                 selected_prompt_name = prompt_names[int(selected_prompt_n) - 1]
                 prompt = load_prompt(selected_prompt_name, config['prompts_dir'])
-                messages = apply_prompt(messages, prompt)
+                messages = apply_prompt_to_messages(messages, prompt)
                 continue
         elif split_message[0] == 'save':
             ask_save_chat()
