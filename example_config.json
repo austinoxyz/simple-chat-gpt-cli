@@ -1,6 +1,6 @@
 {
     "token_usage_file": "path/to/my/token_usage.json",
-    "prompts_dir": "path/to/my/prompts/",
+    "prompts_dir": "path/to/my/prompts",
     "chats_dir": "path/to/my/chats",
     "api_key_file": "openai_key_file",
     "colors": {

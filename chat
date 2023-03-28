@@ -17,36 +17,57 @@ from numpy import zeros, uint32
 
 from pathlib import Path  # for xdg
 
-
-# write ansi colored terminal output
-def write_colored_output(output, color, end='\n') -> None:
-    sys.stdout.write(color + output + '\033[0m' + end)
-
-
-APP_NAME = 'simple-chat'
-
-DEFAULT_MODEL = 'gpt-3.5-turbo'
-DEFAULT_COLORS = {
-    "black":   "#bdae93",
-    "red":     "#9d0006",
-    "green":   "#79740e",
-    "yellow":  "#b57614",
-    "blue":    "#076678",
-    "magenta": "#8f3f71",
-    "cyan":    "#427b58",
-    "white":   "#ffffff"
-}
-
 # ansi color sequences
 ANSI_RED = '\033[31m'
 ANSI_GREEN = '\033[32m'
 ANSI_YELLOW = '\033[33m'
 ANSI_BLUE = '\033[34m'
 
+# write ansi colored terminal output
+def write_colored_output(output, color, end='\n') -> None:
+    sys.stdout.write(color + output + '\033[0m' + end)
+
+
+
+
+APP_NAME = 'simple-chat'
+
+def get_xdg_config_dir() -> str:
+    config_dir = getenv('XDG_CONFIG_HOME', '')
+    if config_dir == '' or config_dir[0] != '/':
+        return str(Path.home().joinpath('.config', APP_NAME))
+    return str(Path(config_dir).joinpath(APP_NAME))
+
+def get_xdg_data_dir() -> str:
+    data_dir = getenv('XDG_DATA_HOME', '')
+    if data_dir == '' or data_dir[0] != '/':
+        return str(Path.home().joinpath('.local/share', APP_NAME)) + '/'
+    return str(Path(data_dir).joinpath(APP_NAME)) + '/'
+
+
+
+
 # store terminal width for text justification
 TERM_WIDTH = 80
 
 REQUIRED_CONFIG_OPTIONS = ['api_key_file']
+DEFAULT_CONFIG_SETTINGS = {
+    'model': 'gpt-3.5-turbo',
+    'prompts_dir': f"{get_xdg_data_dir}prompts",
+    'chats_dir': f"{get_xdg_data_dir}chats",
+    'token_usage_file': f"{get_xdg_data_dir}token_usage.json",
+    'colors': {
+        "black":   "#bdae93",
+        "red":     "#9d0006",
+        "green":   "#79740e",
+        "yellow":  "#b57614",
+        "blue":    "#076678",
+        "magenta": "#8f3f71",
+        "cyan":    "#427b58",
+        "white":   "#ffffff"
+    }
+}
+
 def load_config(config_file_name):
     try:
         json_raw = ''
@@ -71,31 +92,34 @@ def load_config(config_file_name):
             sys.exit(1)
 
     if 'model' not in config:
-        config['model'] = DEFAULT_MODEL
+        config['model'] = DEFAULT_CONFIG_SETTINGS['model']
 
     if 'prompts_dir' not in config:
         config['prompts_dir'] = get_xdg_data_dir() + 'prompts/'
     else:
-        if config['prompts_dir'][-1:] == '/':
-            config['prompts_dir'] = get_xdg_data_dir() + config['prompts_dir'][:-1]
-        else:
-            config['prompts_dir'] = get_xdg_data_dir() + config['prompts_dir']
+        if config['prompts_dir'][0] != '/':
+            if config['prompts_dir'][-1:] == '/':
+                config['prompts_dir'] = get_xdg_data_dir() + config['prompts_dir'][:-1]
+            else:
+                config['prompts_dir'] = get_xdg_data_dir() + config['prompts_dir']
 
     if 'chats_dir' not in config:
         config['chats_dir'] = get_xdg_data_dir() + 'chats/'
     else:
-        if config['chats_dir'][-1:] == '/':
-            config['chats_dir'] = get_xdg_data_dir() + config['chats_dir'][:-1]
-        else:
-            config['chats_dir'] = get_xdg_data_dir() + config['chats_dir']
+        if config['chats_dir'][0] != '/':
+            if config['chats_dir'][-1:] == '/':
+                config['chats_dir'] = get_xdg_data_dir() + config['chats_dir'][:-1]
+            else:
+                config['chats_dir'] = get_xdg_data_dir() + config['chats_dir']
     
     if 'token_usage_file' not in config:
         config['token_usage_file'] = get_xdg_data_dir() + 'token_usage.json'
     else:
-        config['token_usage_file'] = get_xdg_data_dir() + config['token_usage_file']
+        if config['token_usage'][0] != '/':
+            config['token_usage_file'] = get_xdg_data_dir() + config['token_usage_file']
 
     if 'colors' not in config:
-        config['colors'] = DEFAULT_COLORS
+        config['colors'] = DEFAULT_CONFIG_SETTINGS['colors']
 
     return config
 
@@ -189,17 +213,6 @@ def set_clipboard_text(text) -> None:
 
 
 
-def get_xdg_config_dir() -> str:
-    config_dir = getenv('XDG_CONFIG_HOME', '')
-    if config_dir == '' or config_dir[0] != '/':
-        return str(Path.home().joinpath('.config', APP_NAME))
-    return str(Path(config_dir).joinpath(APP_NAME))
-
-def get_xdg_data_dir() -> str:
-    data_dir = getenv('XDG_DATA_HOME', '')
-    if data_dir == '' or data_dir[0] != '/':
-        return str(Path.home().joinpath('.local/share', APP_NAME)) + '/'
-    return str(Path(data_dir).joinpath(APP_NAME)) + '/'
 
 
 
@@ -342,8 +355,6 @@ config = load_config(get_xdg_config_dir() + '/config.json')
 
 openai.api_key_path = config["api_key_file"]
 
-model = DEFAULT_MODEL
-
 token_usage = load_token_usage(config['token_usage_file'])
 session_token_usage = { "completion_tokens": 0, "prompt_tokens": 0, "total_tokens": 0 }
 
@@ -447,12 +458,6 @@ def prompt_save_chat() -> None:
             return
     save_chat(messages, chat_name)
 
-def chat_contains_prompt(messages: list[dict[str, str]]) -> bool:
-    for message in messages:
-        if message['role'] == 'system' and message['content'] != '':
-            return True
-    return False
-
 def apply_prompt(messages: list[dict[str, str]], prompt: str) -> list[dict[str, str]]:
     for i, message in enumerate(messages):
         if message['role'] == 'system':
@@ -466,10 +471,10 @@ def confirm() -> bool:
         
 
 # main
-print_startup_message()
 last_response = ''
 messages = []
 
+print_startup_message()
 while True:
     # FIXME: Pasting in messages with newlines breaks this
     print_prompt(); message = input()
@@ -483,7 +488,6 @@ while True:
 
     split_message = message.split(' ')
     if len(split_message) <= MOST_WORDS_IN_COMMAND:
-        # TODO implement `chat new`, `chat list`, `chat load`
         # TODO implement `clip code [n]`
         if split_message[0] == 'exit':
             account_token_usage(session_token_usage)
