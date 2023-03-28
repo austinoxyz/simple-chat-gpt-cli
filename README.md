@@ -2,7 +2,19 @@
 
 > A simple CLI tool to use Chat GPT Chat Completions in the terminal
 
-> To get started, run `setup.sh` and then `./chat`
+> To get started, run 
+```
+chmod +x setup.sh && ./setup.sh
+```
+> Then run either
+```
+chmod +x chat.py && ./chat.py
+```
+> or just
+```
+python3 chat.py
+```
+
 
 ### Capabilities
 > 1. Save and switch between prompts.
@@ -14,8 +26,10 @@
 > See `example_config.json` for available configuration options.
 
 **TODO**
-1. Handle standard readline commands.
-2. Account the token usage.
+> 1. Handle standard readline commands.
+> 2. Account the token usage.
+> 3. Add functionality to stop response from generating
+> 4. Package `chat.py` into a static binary that can be added to the user's `PATH`
 
 **FIXME**
-1. Cannot paste multi-line input.
+> 1. Cannot paste multi-line input.
