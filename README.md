@@ -2,18 +2,18 @@
 
 > A simple CLI tool to use Chat GPT Chat Completions in the terminal
 
-> To get started, run 
-```
-chmod +x setup.sh && ./setup.sh
-```
-> Then run either
-```
-chmod +x chat.py && ./chat.py
-```
-> or just
-```
-python3 chat.py
-```
+> To get started, add the file location of your API key to 
+> ```
+> config.json
+> ```
+> Then run 
+> ```
+> chmod +x setup.sh && ./setup.sh
+> ```
+> and finally you can
+> ```
+> python3 chat.py
+> ```
 
 
 ### Capabilities
