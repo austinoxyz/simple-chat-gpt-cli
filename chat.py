@@ -1,7 +1,5 @@
 #!/usr/bin/python3
 
-from typing import List
-
 import sys
 import re
 import openai
@@ -51,11 +49,11 @@ def get_xdg_data_dir() -> str:
 TERM_WIDTH = 80
 
 REQUIRED_CONFIG_OPTIONS = ['api_key_file']
-DEFAULT_CONFIG_SETTINGS = {
+DEFAULT_CONFIG_OPTIONS = {
     'model': 'gpt-3.5-turbo',
-    'prompts_dir': f"{get_xdg_data_dir}prompts",
-    'chats_dir': f"{get_xdg_data_dir}chats",
-    'token_usage_file': f"{get_xdg_data_dir}token_usage.json",
+    'prompts_dir': f"{get_xdg_data_dir()}prompts",
+    'chats_dir': f"{get_xdg_data_dir()}chats",
+    'token_usage_file': f"{get_xdg_data_dir()}token_usage.json",
     'colors': {
         "black":   "#bdae93",
         "red":     "#9d0006",
@@ -69,6 +67,7 @@ DEFAULT_CONFIG_SETTINGS = {
 }
 
 def load_config(config_file_name):
+    config = {}
     try:
         json_raw = ''
         with open(config_file_name, 'r') as config_file:
@@ -92,10 +91,10 @@ def load_config(config_file_name):
             sys.exit(1)
 
     if 'model' not in config:
-        config['model'] = DEFAULT_CONFIG_SETTINGS['model']
+        config['model'] = DEFAULT_CONFIG_OPTIONS['model']
 
     if 'prompts_dir' not in config:
-        config['prompts_dir'] = get_xdg_data_dir() + 'prompts/'
+        config['prompts_dir'] = DEFAULT_CONFIG_OPTIONS['prompts_dir']
     else:
         if config['prompts_dir'][0] != '/':
             if config['prompts_dir'][-1:] == '/':
@@ -104,7 +103,7 @@ def load_config(config_file_name):
                 config['prompts_dir'] = get_xdg_data_dir() + config['prompts_dir']
 
     if 'chats_dir' not in config:
-        config['chats_dir'] = get_xdg_data_dir() + 'chats/'
+        config['chats_dir'] = DEFAULT_CONFIG_OPTIONS['chats_dir']
     else:
         if config['chats_dir'][0] != '/':
             if config['chats_dir'][-1:] == '/':
@@ -119,7 +118,7 @@ def load_config(config_file_name):
             config['token_usage_file'] = get_xdg_data_dir() + config['token_usage_file']
 
     if 'colors' not in config:
-        config['colors'] = DEFAULT_CONFIG_SETTINGS['colors']
+        config['colors'] = DEFAULT_CONFIG_OPTIONS['colors']
 
     return config
 
@@ -153,33 +152,12 @@ def rjust_truecolor(string: str, width=TERM_WIDTH):
     length = len_truecolor(string)
     if length >= width:
         return string
-    return (' ' * floor((width - len_truecolor(string)))) + string
+    return (' ' * (width - len_truecolor(string))) + string
 
-def split_string_into_len_n_substrings(input_string: str, n: int) -> List[str]:
+def split_string_into_len_n_substrings(input_string: str, n: int) -> list[str]:
     return [input_string[i:i+n] for i in range(0, len(input_string), n)]
 
-def wrap_text(text: str, width_box: (int, int), pos: (int)) -> List[str]:
-    wrapped_text = []
-    words = text.split(' ')
-    if len(words) == 1:
-        return words
-    line = words[0]
-    begin = pos
-    start_x, end_x = width_box
-    max_width = end_x - start_x
-    for word in words[1:]:
-        if len(line) + len(word) < max_width:
-            line += ' ' + word
-        else:
-            if len(wrapped_text) == 0:
-                begin = start_x
-            wrapped_text.append(line)
-            line = word
-    wrapped_text.append(line)
-    wrapped_text = [line for line in wrapped_text if line != '']
-    return wrapped_text
-
-def wrap_truecolor_text(text: str, width_box: (int, int), pos: (int)) -> List[str]:
+def wrap_truecolor_text(text: str, width_box: (int, int), pos: (int)) -> list[str]:
     wrapped_text = []
     words = text.split(' ')
     if len(words) == 1:
@@ -196,6 +174,7 @@ def wrap_truecolor_text(text: str, width_box: (int, int), pos: (int)) -> List[st
                 begin = start_x
             wrapped_text.append(line)
             line = word
+    begin; # to trick cython
     wrapped_text.append(line)
     wrapped_text = [line for line in wrapped_text if line != '']
     return wrapped_text
@@ -238,12 +217,11 @@ def levenshtein_dist(s1: str, s2: str) -> int:
                 prefix_matrix[i - 1][j] + 1,
                 prefix_matrix[i][j - 1] + 1,
                 prefix_matrix[i - 1][j - 1] + sub_cost)
-    prefix_matrix_sz = prefix_matrix.size
-    return (prefix_matrix.flatten())[prefix_matrix_sz - 1]
+    return (prefix_matrix.flatten())[prefix_matrix.size - 1]
 
 
 
-def load_prompt_names(prompts_dir: str) -> List[str]:
+def load_prompt_names(prompts_dir: str) -> list[str]:
     res = []
     try:
         res = [filename[:-7] for filename in listdir(prompts_dir) if filename.endswith('.prompt')]
@@ -257,6 +235,7 @@ def load_prompt_names(prompts_dir: str) -> List[str]:
 def load_prompt(prompt_name: str, prompts_dir: str) -> str:
     prompt_file_name = prompt_name + '.prompt'
     prompt_path = join(prompts_dir, prompt_file_name)  # os.path.join
+    prompt = ''  # to trick cython
     try:
         with open(prompt_path, 'r') as prompt_file:
             prompt = prompt_file.read()
@@ -283,10 +262,10 @@ def save_prompt(prompt: str, prompt_name: str, prompts_dir: str) -> None:
 
 
 
-def load_chat_names(prompts_dir: str) -> List[str]:
+def load_chat_names(chats_dir: str) -> list[str]:
     res = []
     try:
-        res = [filename[:-5] for filename in listdir(prompts_dir) if filename.endswith('.chat')]
+        res = [filename[:-5] for filename in listdir(chats_dir) if filename.endswith('.chat')]
     except FileNotFoundError:
         write_colored_output("CONFIG ERROR", ANSI_RED, end='')
         print(f": Couldn't find directory ", end='', flush=True)
@@ -297,6 +276,7 @@ def load_chat_names(prompts_dir: str) -> List[str]:
 def load_chat(chat_name: str, chats_dir: str) -> list[dict[str,str]]:
     chat_file_name = chat_name + '.chat'
     chat_path = join(chats_dir, chat_file_name)  # os.path.join
+    chat = []  # to trick cython
     try:
         with open(chat_path, 'r') as chat_file:
             chat = loads(chat_file.readline())
@@ -332,6 +312,7 @@ def save_chat(messages: list[dict[str, str]], chat_name: str) -> None:
 
 
 def load_token_usage(token_usage_file_name):
+    token_usage = {}  # to trick cython
     try:
         with open(token_usage_file_name, 'r') as token_usage_file:
             token_usage = loads(token_usage_file.readline())
@@ -359,20 +340,21 @@ token_usage = load_token_usage(config['token_usage_file'])
 session_token_usage = { "completion_tokens": 0, "prompt_tokens": 0, "total_tokens": 0 }
 
 prompt_names = load_prompt_names(config['prompts_dir'])
-chat_names = load_chat_names(config['chats_dir'])
-
 def list_saved_prompts() -> None:
+    print(flush=True)
     for i, name in enumerate(prompt_names):
         print(f"   {i+1}. {name}")
+    print(flush=True)
 
+chat_names = load_chat_names(config['chats_dir'])
 def list_saved_chats() -> None:
+    print(flush=True)
     for i, name in enumerate(chat_names):
         print(f"   {i+1}. {name}")
+    print(flush=True)
 
 CMD_COLOR = config['colors']['blue']
 CFG_COLOR = config['colors']['green']
-
-
 
 
 
@@ -390,11 +372,12 @@ commands = { 'exit':         "exit simple-chat-gpt-cli",
 
 MOST_WORDS_IN_COMMAND = max([len(cmd_name.split(' ')) for cmd_name in commands.keys()])
 
-LEV_DIST_CUTOFF = 6
+LEV_DIST_CUTOFF = 6  # arbitrarily chosen
 
-LONGEST_PROMPT_NAME = max([len(name) for name in prompt_names])
+LONGEST_PROMPT_NAME = 0 if len(prompt_names) == 0 else max([len(name) for name in prompt_names])
 LONGEST_COMMAND_NAME = max(commands.keys(), key=lambda k: len(k))
 SIMILAR_COMMAND_LENGTH_CUTOFF = len(LONGEST_COMMAND_NAME) + LONGEST_PROMPT_NAME
+
 
 def find_similar_command_name(user_input: str) -> str:
     if len(user_input) >= SIMILAR_COMMAND_LENGTH_CUTOFF:
@@ -410,12 +393,6 @@ def find_similar_command_name(user_input: str) -> str:
     if minimum[1] == 0:
         return ''
     return minimum[0]
-
-def is_command(message: str) -> bool:
-    pass # TODO
-
-
-
 
 
 
@@ -444,19 +421,54 @@ def print_help_message() -> None:
 
 
 
-def print_prompt() -> None:
+def print_cli_prompt() -> None:
     print(f"{truecolor_ify('   >>> ', config['colors']['yellow'])}", end='')
 
-def prompt_save_chat() -> None:
+def ask_save_prompt() -> None:
+    print('\n   Save this prompt for future use? y/n')
+    if confirm():
+        print('\n   Prompt name: ')
+        print_cli_prompt()
+        prompt_name = input()
+        if prompt_name in prompt_names:
+            print(f"\n   There is already a prompt with that name saved in \
+{truecolor_ify('$prompts_dir', CFG_COLOR)}.\n   Do you want to overwrite it?")
+            if not confirm():
+                print('\n   Prompt left unsaved.')
+                return
+        save_prompt(prompt, prompt_name, config['prompts_dir'])
+        prompt_names.append(prompt_name)
+
+def ask_save_chat() -> None:
     print('\n   What would you like to name this chat?')
-    print_prompt(); chat_name = input()
+    print_cli_prompt()
+    chat_name = input()
     if len(chat_names) != 0 and chat_name in chat_names:
         print("\n   There is already a chat saved with that name. Overwrite it?")
-        print_prompt(); are_you_sure = input()
+        print_cli_prompt()
+        are_you_sure = input()
         if are_you_sure not in ['y', 'yes']:
             print("\n   Not saving chat.")
             return
     save_chat(messages, chat_name)
+    chat_names.append(chat_name)
+
+def ask_selection() -> int:
+    selected_n = 0
+    while True:
+        print_cli_prompt()
+        selected_n = input()
+        if selected_n.isdigit():
+            break
+        print("\n   Must enter number.")
+    assert(selected_n != 0)
+    return selected_n
+
+def confirm() -> bool:
+    print_cli_prompt()
+    are_you_sure = input()
+    return are_you_sure in ['y', 'yes']
+
 
 def apply_prompt(messages: list[dict[str, str]], prompt: str) -> list[dict[str, str]]:
     for i, message in enumerate(messages):
@@ -465,9 +477,6 @@ def apply_prompt(messages: list[dict[str, str]], prompt: str) -> list[dict[str, 
             return messages
     return [ {'role': 'system', 'content': prompt}, *messages ]
 
-def confirm() -> bool:
-    print_prompt(); are_you_sure = input()
-    return are_you_sure in ['y', 'yes']
         
 
 # main
@@ -477,7 +486,8 @@ messages = []
 print_startup_message()
 while True:
     # FIXME: Pasting in messages with newlines breaks this
-    print_prompt(); message = input()
+    print_cli_prompt()
+    message = input()
     if message == '':
         continue 
 
@@ -505,32 +515,24 @@ while True:
             continue
         elif split_message[0] == 'prompt':
             if split_message[1] == 'new':
-                print('Start new chat? y/n')
-                if last_response != '' and confirm():
-                    messages = []
+                chat_type = 'current'
+                if last_response != '':
+                    print('Start new chat? y/n')
+                    if confirm():
+                        chat_type = 'new'
+                        messages = []
                 print('Enter your prompt:'.center(TERM_WIDTH)); print(flush=True)
-                print_prompt(); prompt = input()
-                print('\n   Save this prompt for future use?')
-                if confirm():
-                    print('\n   Prompt name: ')
-                    print_prompt(); prompt_name = input()
-                    if prompt_name in prompt_names:
-                        print(f"\n   There is already a prompt with that name saved in \
-{truecolor_ify('$prompts_dir', CFG_COLOR)}.\n   Do you want to overwrite it?")
-                        if confirm():
-                            print('\n   Prompt left unsaved.')
-                            break
-                    save_prompt(prompt, prompt_name, config['prompts_dir'])
+                print_cli_prompt()
+                prompt = input()
+                ask_save_prompt()
                 messages = apply_prompt(messages, prompt)
+                print(f"\n   Prompt applied to {chat_type} chat.")
                 continue
             elif split_message[1] == 'list':
                 if len(prompt_names) == 0:
-                    print(center_truecolor(f"\n   No prompts located in \
-{truecolor_ify(config['prompts_dir'], CFG_COLOR)}", TERM_WIDTH))
+                    print(f"\n   No prompts located in {truecolor_ify(config['prompts_dir'], CFG_COLOR)}")
                     continue
-                print(flush=True)
                 list_saved_prompts()
-                print(flush=True)
                 continue
             elif split_message[1] == 'load':
                 if len(prompt_names) == 0:
@@ -541,29 +543,21 @@ while True:
                     if confirm():
                         messages = []
                         continue
-                print(flush=True)
                 list_saved_prompts()
-                print(flush=True)
-                while True:
-                    print_prompt(); selected_prompt_n = input()
-                    if selected_prompt_n.isdigit():
-                        break
-                    print("\n   Must enter number of desired prompt.")
+                selected_prompt_n = ask_selection()
                 selected_prompt_name = prompt_names[int(selected_prompt_n) - 1]
                 prompt = load_prompt(selected_prompt_name, config['prompts_dir'])
                 messages = apply_prompt(messages, prompt)
                 continue
         elif split_message[0] == 'save':
-            prompt_save_chat()
+            ask_save_chat()
             continue
         elif split_message[0] == 'chat':
             if split_message[1] == 'list':
                 if len(prompt_names) == 0:
                     print(f"\n   No chats located in {truecolor_ify(config['chats_dir'], CFG_COLOR)}")
                     continue
-                print(flush=True)
                 list_saved_chats()
-                print(flush=True)
                 continue
             elif split_message[1] == 'load':
                 if len(chat_names) == 0:
@@ -574,15 +568,9 @@ while True:
                     if not confirm():
                         print('\n   Not starting new chat.')
                         continue
-                print(flush=True)
                 list_saved_chats()
-                print(flush=True)
-                while True:
-                    print_prompt(); selected_prompt_n = input()
-                    if selected_prompt_n.isdigit():
-                        break
-                    print("\n   Must enter number of desired chat.")
-                selected_chat_name = chat_names[int(selected_prompt_n) - 1]
+                selected_chat_n = ask_selection()
+                selected_chat_name = chat_names[int(selected_chat_n) - 1]
                 messages = load_chat(selected_chat_name, config['chats_dir'])
                 continue
             elif split_message[1] == 'new':
@@ -591,8 +579,16 @@ while True:
                     prompt = ''
                     print('\n   Include prompt? y/n')
                     if confirm():
-                        print('Enter your prompt:'.center(TERM_WIDTH)); print(flush=True)
-                        print_prompt(); prompt = input()
+                        print('\n   Use existing prompt? y/n')
+                        if confirm():
+                            list_saved_prompts()
+                            selected_prompt_n = ask_selection()
+                            selected_prompt_name = prompt_names[int(selected_prompt_n) - 1]
+                            prompt = load_prompt(selected_prompt_name, config['prompts_dir'])
+                        else:
+                            print('Enter your prompt:'.center(TERM_WIDTH)); print(flush=True)
+                            print_cli_prompt()
+                            prompt = input()
                     messages = [{'role':'system', 'content': prompt}]
                 print('\n   Begin new chat')
                 continue
