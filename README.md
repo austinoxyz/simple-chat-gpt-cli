@@ -1,10 +1,8 @@
 # Simple Chat GPT CLI
-
 > A simple CLI tool to use Chat GPT Chat Completions in the terminal
 
-> To get started, add the file location of your API key to `config.json`
-
-> Then run 
+### Setup
+> To get started, add the file location of your API key to `config.json`, then run
 > ```
 > chmod +x setup.sh && ./setup.sh
 > ```
@@ -12,7 +10,6 @@
 > ```
 > python3 chat.py
 > ```
-
 
 ### Capabilities
 > 1. Save and switch between prompts.
