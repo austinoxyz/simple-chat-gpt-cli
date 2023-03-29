@@ -34,7 +34,7 @@ DEFAULT_XDG_LOCATIONS = {
     'XDG_DATA_HOME':   '.local/share' }
 
 def get_xdg_dir(xdg_env_var: str) -> str:
-    xdg_dir = getenv('XDG_CONFIG_HOME', '')
+    xdg_dir = getenv(xdg_env_var, '')
     if xdg_dir == '' or xdg_dir[0] != '/':
         default_loc = DEFAULT_XDG_LOCATIONS[xdg_env_var]
         return str(Path.home().joinpath(default_loc, APP_NAME)) + '/'
@@ -139,14 +139,14 @@ def center_truecolor(truecolor_string: str, width=TERM_WIDTH):
     length = len_truecolor(truecolor_string)
     if length >= width:
         return truecolor_string
-    padding = ' ' * floor((width - len_truecolor(truecolor_string)) / 2)
+    padding = ' ' * floor((width - length) / 2)
     return padding + truecolor_string + padding
 
 def rjust_truecolor(truecolor_string: str, width=TERM_WIDTH):
     length = len_truecolor(truecolor_string)
     if length >= width:
         return truecolor_string
-    return (' ' * (width - len_truecolor(truecolor_string))) + truecolor_string
+    return (' ' * (width - length)) + truecolor_string
 
 def split_string_into_len_n_substrings(input_string: str, n: int) -> list[str]:
     return [input_string[i:i+n] for i in range(0, len(input_string), n)]
@@ -548,7 +548,7 @@ while True:
             continue
         elif split_message[0] == 'chat':
             if split_message[1] == 'list':
-                if len(prompt_names) == 0:
+                if len(chat_names) == 0:
                     print(f"\n   No chats located in {truecolor_ify(config['chats_dir'], CFG_COLOR)}")
                     continue
                 list_saved_chats()
