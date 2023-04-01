@@ -62,7 +62,7 @@ DEFAULT_CONFIG_OPTIONS = {
 api_key_mode = ''
 
 def load_config(config_file_name: str) -> dict[str, any]:
-    config = {}
+    config = {} # to trick cython
     try:
         json_raw = ''
         with open(config_file_name, 'r') as config_file:
@@ -570,8 +570,8 @@ while True:
             messages=messages,
             temperature=0,
             stream=True)
-    except openai.error.RateLimitError:
-        print("\n   Current quota exceeded. Gotta pay up!")
+    except Exception as ex:
+        print(f"\n   Something went wrong: {truecolor_ify(str(ex), config['colors']['red'])}\n")
         sys.exit(1)
 
     cursor = START_CURSOR
