@@ -4,7 +4,7 @@
 ### Setup
 > To get started, you must first let `chat.py` where to find your `OPENAI_API_KEY`. 
 >
-> You can either add the file location of your API key to `config.json`,
+> You can either add the file location of your API key to `config.json` with the key `api_key_file`
 > or have the `OPENAI_API_KEY` environment variable set. 
 >
 > Then, run
@@ -22,7 +22,6 @@
 > 3. Store the contents of the last response in the clipboard using `xclip`.
 
 ### Configuration
-> Only the `openai_key_file` config option is required.
 > See `example_config.json` for available configuration options.
 > Both relative and absolute paths will be accepted.
 
