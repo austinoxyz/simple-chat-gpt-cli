@@ -380,7 +380,7 @@ def print_cli_prompt() -> None:
 START_CURSOR = 7  # aligns with the user's cli prompt
 END_CURSOR = TERM_WIDTH - 7
 def print_response_lpad() -> None:
-    print(f"\n{' ' * START_CURSOR}", flush=True, end='')
+    print(f"{' ' * START_CURSOR}", flush=True, end='')
 
 def ask_save_prompt() -> None:
     print('\n   Save this prompt for future use? y/n')
@@ -566,6 +566,7 @@ while True:
     collected_messages = []
     chunk_tokens = 0
 
+    print(flush=True)
     print_response_lpad()
     for chunk in response:
 
@@ -582,6 +583,7 @@ while True:
             # this feels hacky, but after viewing many tokens from generated responses,
             # I have yet to see a space not be at the beginning of the token.
             if chunk_message[0] == ' ' and cursor > END_CURSOR:
+                print(flush=True)
                 print_response_lpad()
                 chunk_message = chunk_message[1:] # remove the leading space for alignment
                 cursor = START_CURSOR
