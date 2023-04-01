@@ -42,7 +42,6 @@ def get_xdg_dir(xdg_env_var: str) -> str:
 # store terminal width for text justification
 TERM_WIDTH = 80
 
-REQUIRED_CONFIG_OPTIONS = ['api_key_file']
 DEFAULT_CONFIG_OPTIONS = {
     'model': 'gpt-3.5-turbo',
     'prompts_dir': f"{get_xdg_dir('XDG_DATA_HOME')}prompts",
@@ -60,6 +59,8 @@ DEFAULT_CONFIG_OPTIONS = {
     }
 }
 
+api_key_mode = ''
+
 def load_config(config_file_name: str) -> dict[str, any]:
     config = {}
     try:
@@ -76,13 +77,17 @@ def load_config(config_file_name: str) -> dict[str, any]:
         import traceback
         print(traceback.format_exc())
 
-    for config_key in REQUIRED_CONFIG_OPTIONS:
-        if config_key not in config:
-            write_colored_output("CONFIG ERROR", ANSI_RED, end='')
-            print(f": Must include ", end='', flush=True)
-            write_colored_output(f"{config_key}", ANSI_GREEN, end='')
-            print(" in config file.", flush=True)
-            sys.exit(1)
+    api_key_env_var = getenv('OPENAI_API_KEY', '')
+    if api_key_env_var != '':
+        config['api_key'] = api_key_env_var
+    elif 'api_key_file' not in config:
+        write_colored_output("API_KEY ERROR", ANSI_RED, end='')
+        print(f": Must include either an ", end='', flush=True)
+        write_colored_output(f"api_key_file", ANSI_GREEN, end='')
+        print(" in config file,\n               or have the ", end = '', flush=True)
+        write_colored_output(f"OPENAI_API_KEY", ANSI_GREEN, end='')
+        print(f" environment variable set.", flush=True)
+        sys.exit(1)
 
     if 'model' not in config:
         config['model'] = DEFAULT_CONFIG_OPTIONS['model']
@@ -117,7 +122,11 @@ def load_config(config_file_name: str) -> dict[str, any]:
     return config
 
 config = load_config(get_xdg_dir('XDG_CONFIG_HOME') + '/config.json')
-openai.api_key_path = config["api_key_file"]
+
+if 'api_key' in config:
+    openai.api_key = config['api_key']
+else:
+    openai.api_key_path = config['api_key_file']
 
 def convert_hex_to_truecolor_ansi(color: str) -> str:
     r = int(color[1:3], base=16)
@@ -443,8 +452,8 @@ messages = []
 
 print_startup_message()
 while True:
-    # FIXME: Pasting in messages with newlines breaks this
     print_cli_prompt()
+    # FIXME: Pasting in messages with newlines breaks this
     message = input()
     if message == '':
         continue 
@@ -554,11 +563,16 @@ while True:
 
     messages.append({"role": "user", "content": message})
 
-    response = openai.ChatCompletion.create(
-        model=config['model'],
-        messages=messages,
-        temperature=0,
-        stream=True)
+    respone = None # to trick cython
+    try:
+        response = openai.ChatCompletion.create(
+            model=config['model'],
+            messages=messages,
+            temperature=0,
+            stream=True)
+    except openai.error.RateLimitError:
+        print("\n   Current quota exceeded. Gotta pay up!")
+        sys.exit(1)
 
     cursor = START_CURSOR
 
