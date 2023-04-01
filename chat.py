@@ -4,6 +4,8 @@ import sys
 import re
 import openai
 
+import readline
+
 from os import getenv, listdir
 from os.path import join
 
@@ -25,9 +27,6 @@ ANSI_GREEN = '\033[32m'
 def write_colored_output(output, color, end='\n') -> None:
     sys.stdout.write(color + output + '\033[0m' + end)
 
-
-
-
 # implicit $HOME before these locations
 DEFAULT_XDG_LOCATIONS = {
     'XDG_CONFIG_HOME': '.config',
@@ -39,9 +38,6 @@ def get_xdg_dir(xdg_env_var: str) -> str:
         default_loc = DEFAULT_XDG_LOCATIONS[xdg_env_var]
         return str(Path.home().joinpath(default_loc, APP_NAME)) + '/'
     return str(Path(xdg_dir).joinpath(APP_NAME)) + '/'
-
-
-
 
 # store terminal width for text justification
 TERM_WIDTH = 80
@@ -110,7 +106,7 @@ def load_config(config_file_name: str) -> dict[str, any]:
                 config['chats_dir'] = get_xdg_dir('XDG_DATA_HOME') + config['chats_dir']
     
     if 'token_usage_file' not in config:
-        config['token_usage_file'] = get_xdg_dir('XDG_DATA_HOME') + 'token_usage.json'
+        config['token_usage_file'] = DEFAULT_CONFIG_OPTIONS['token_usage_file']
     else:
         if config['token_usage'][0] != '/':
             config['token_usage_file'] = get_xdg_dir('XDG_DATA_HOME') + config['token_usage_file']
@@ -120,7 +116,8 @@ def load_config(config_file_name: str) -> dict[str, any]:
 
     return config
 
-
+config = load_config(get_xdg_dir('XDG_CONFIG_HOME') + '/config.json')
+openai.api_key_path = config["api_key_file"]
 
 def convert_hex_to_truecolor_ansi(color: str) -> str:
     r = int(color[1:3], base=16)
@@ -173,24 +170,12 @@ def wrap_truecolor_text(text: str, width_box: (int, int), pos: (int)) -> list[st
     wrapped_text = [line for line in wrapped_text if line != '']
     return wrapped_text
 
-
 # use xclip to put the last chat completion in the clipboard
 def set_clipboard_text(text: str) -> None:
     p = Popen(['xclip', '-selection', 'clipboard'], stdin=PIPE)
     p.stdin.write(text.encode('utf-8'))
     p.stdin.close()
     p.wait()
-
-
-
-
-
-
-
-
-
-
-
 
 def levenshtein_dist(s1: str, s2: str) -> int:
     len1 = len(s1)
@@ -212,8 +197,6 @@ def levenshtein_dist(s1: str, s2: str) -> int:
                 prefix_matrix[i][j - 1] + 1,
                 prefix_matrix[i - 1][j - 1] + sub_cost)
     return (prefix_matrix.flatten())[prefix_matrix.size - 1]
-
-
 
 def load_prompt_names(prompts_dir: str) -> list[str]:
     res = []
@@ -254,8 +237,6 @@ def save_prompt(prompt: str, prompt_name: str, prompts_dir: str) -> None:
         return
     print(f'\n   Saved to {color_prompts_dir}/{prompt_file_name}')
 
-
-
 def load_chat_names(chats_dir: str) -> list[str]:
     res = []
     try:
@@ -282,7 +263,6 @@ def load_chat(chat_name: str, chats_dir: str) -> list[dict[str,str]]:
     print(f'\n   Loaded chat at {chat_path}')
     return chat
 
-
 def save_chat(messages: list[dict[str, str]], chat_name: str) -> None:
     chat_file_name = chat_name + '.chat'
     save_path = join(config['chats_dir'], chat_file_name)  # os.path.join
@@ -295,15 +275,6 @@ def save_chat(messages: list[dict[str, str]], chat_name: str) -> None:
         print(f": Couldn't write to ", end='', flush=True)
         write_colored_output(f"{color_chats_dir}{chat_file_name}", ANSI_GREEN, end='\n')
     print(f"\n   Saved to {color_chats_dir}/{chat_file_name}")
-
-
-
-
-
-
-
-
-
 
 def load_token_usage(token_usage_file_name: str) -> dict[str, int]:
     token_usage = {}  # to trick cython
@@ -320,15 +291,6 @@ def load_token_usage(token_usage_file_name: str) -> dict[str, int]:
 def account_token_usage(request_token_usage: dict[str, int]) -> None:
     pass
 
-
-
-
-
-
-config_file_name = 'config.json'
-config = load_config(get_xdg_dir('XDG_CONFIG_HOME') + '/config.json')
-
-openai.api_key_path = config["api_key_file"]
 
 token_usage = load_token_usage(config['token_usage_file'])
 session_token_usage = { "completion_tokens": 0, "prompt_tokens": 0, "total_tokens": 0 }
@@ -350,9 +312,6 @@ def list_saved_chats() -> None:
 CMD_COLOR = config['colors']['blue']
 CFG_COLOR = config['colors']['green']
 
-
-
-
 commands = { 'exit':         "exit simple-chat-gpt-cli", 
              'help':         "display the message you are currently reading.",
              'clip':         "store the contents of the last chat completion in the clipboard.", 
@@ -371,7 +330,6 @@ LEV_DIST_CUTOFF = 6  # arbitrarily chosen
 LONGEST_PROMPT_NAME = 0 if len(prompt_names) == 0 else max([len(name) for name in prompt_names])
 LONGEST_COMMAND_NAME = max(commands.keys(), key=lambda k: len(k))
 SIMILAR_COMMAND_LENGTH_CUTOFF = len(LONGEST_COMMAND_NAME) + LONGEST_PROMPT_NAME
-
 
 def find_similar_command_name(user_input: str) -> str:
     if len(user_input) >= SIMILAR_COMMAND_LENGTH_CUTOFF:
@@ -415,8 +373,12 @@ def print_help_message() -> None:
 
 
 
+CLI_PROMPT = f"{truecolor_ify('   >>> ', config['colors']['yellow'])}"
 def print_cli_prompt() -> None:
-    print(f"{truecolor_ify('   >>> ', config['colors']['yellow'])}", end='')
+    print(CLI_PROMPT, end='')
+
+START_CURSOR = 7  # aligns with the user's cli prompt
+END_CURSOR = TERM_WIDTH - 7
 
 def ask_save_prompt() -> None:
     print('\n   Save this prompt for future use? y/n')
@@ -464,12 +426,12 @@ def confirm() -> bool:
     return are_you_sure in ['y', 'yes']
 
 
-def apply_prompt_to_messages(messages: list[dict[str, str]], prompt: str) -> list[dict[str, str]]:
+def apply_prompt_to_messages(messages: list[dict[str, str]], prompt: str):
     for i, message in enumerate(messages):
         if message['role'] == 'system':
             messages[i]['content'] = prompt
-            return messages
-    return [ {'role': 'system', 'content': prompt}, *messages ]
+            return
+    messages = [ {'role': 'system', 'content': prompt}, *messages ]
 
         
 
@@ -519,7 +481,7 @@ while True:
                 print_cli_prompt()
                 prompt = input()
                 ask_save_prompt()
-                messages = apply_prompt_to_messages(messages, prompt)
+                apply_prompt_to_messages(messages, prompt)
                 print(f"\n   Prompt applied to {chat_type} chat.")
                 continue
             elif split_message[1] == 'list':
@@ -541,7 +503,7 @@ while True:
                 selected_prompt_n = ask_selection()
                 selected_prompt_name = prompt_names[int(selected_prompt_n) - 1]
                 prompt = load_prompt(selected_prompt_name, config['prompts_dir'])
-                messages = apply_prompt_to_messages(messages, prompt)
+                apply_prompt_to_messages(messages, prompt)
                 continue
         elif split_message[0] == 'save':
             ask_save_chat()
@@ -590,43 +552,37 @@ while True:
 
     messages.append({"role": "user", "content": message})
 
-    start_time = time()
     response = openai.ChatCompletion.create(
         model=config['model'],
         messages=messages,
         temperature=0,
         stream=True)
 
-    # FIXME see below FIXME
-    start_cursor = int(TERM_WIDTH * 0.2)
-    end_cursor = TERM_WIDTH - int(TERM_WIDTH * 0.25)
+    cursor = START_CURSOR
 
     collected_chunks = []
     collected_messages = []
     chunk_tokens = 0
 
-    print(f"{' ' * start_cursor}")
+    print(f"\n{' ' * START_CURSOR}", flush=True, end='')
     for chunk in response:
 
-        chunk_time = time() - start_time  
         collected_chunks.append(chunk)  
         chunk_delta = loads(f"{chunk['choices'][0]['delta']}")
 
         chunk_tokens = 0
-        cursor = start_cursor
         if "role" in chunk_delta:
             continue
         elif "content" in chunk_delta:
             chunk_message = chunk_delta["content"]
             collected_messages.append(chunk_message)  
 
-            # FIXME padding on either side of chat completion response not working
-            if ' ' in chunk_message and cursor > end_cursor:
-                print(chunk_message, flush=True)
-                if cursor != start_cursor:
-                    print("\n", flush=True)
-                print(f"{' ' * start_cursor}", flush=True)
-                cursor = start_cursor
+            # this feels hacky, but after viewing many tokens from generated responses,
+            # I have yet to see a space not be at the beginning of the token.
+            if chunk_message[0] == ' ' and cursor > END_CURSOR:
+                print(f"\n{' ' * START_CURSOR}", flush=True, end='')
+                chunk_message = chunk_message[1:] # remove the leading space for alignment
+                cursor = START_CURSOR
             cursor += len(chunk_message)
 
             chunk_tokens += 1
