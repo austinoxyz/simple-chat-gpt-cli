@@ -221,7 +221,7 @@ def load_prompt(prompt_name: str, prompts_dir: str) -> str:
         print(f": Couldn't read ", end='', flush=True)
         write_colored_output(f"{prompt_path}", ANSI_GREEN, end='\n')
         sys.exit(1)
-    print(f'\n   Loaded prompt at {prompt_path}')
+    print(f'\n   Loaded prompt at {truecolor_ify(prompt_path, CFG_COLOR)}')
     return prompt
 
 def save_prompt(prompt: str, prompt_name: str, prompts_dir: str) -> None:
@@ -260,7 +260,7 @@ def load_chat(chat_name: str, chats_dir: str) -> list[dict[str,str]]:
         print(f": Couldn't read ", end='', flush=True)
         write_colored_output(f"{chat_path}", ANSI_GREEN, end='\n')
         sys.exit(1)
-    print(f'\n   Loaded chat at {chat_path}')
+    print(f'\n   Loaded chat at {truecolor_ify(chat_path, CFG_COLOR)}')
     return chat
 
 def save_chat(messages: list[dict[str, str]], chat_name: str) -> None:
@@ -379,6 +379,8 @@ def print_cli_prompt() -> None:
 
 START_CURSOR = 7  # aligns with the user's cli prompt
 END_CURSOR = TERM_WIDTH - 7
+def print_response_lpad() -> None:
+    print(f"\n{' ' * START_CURSOR}", flush=True, end='')
 
 def ask_save_prompt() -> None:
     print('\n   Save this prompt for future use? y/n')
@@ -564,7 +566,7 @@ while True:
     collected_messages = []
     chunk_tokens = 0
 
-    print(f"\n{' ' * START_CURSOR}", flush=True, end='')
+    print_response_lpad()
     for chunk in response:
 
         collected_chunks.append(chunk)  
@@ -580,15 +582,19 @@ while True:
             # this feels hacky, but after viewing many tokens from generated responses,
             # I have yet to see a space not be at the beginning of the token.
             if chunk_message[0] == ' ' and cursor > END_CURSOR:
-                print(f"\n{' ' * START_CURSOR}", flush=True, end='')
+                print_response_lpad()
                 chunk_message = chunk_message[1:] # remove the leading space for alignment
                 cursor = START_CURSOR
             cursor += len(chunk_message)
 
             chunk_tokens += 1
             print(chunk_message, end='', flush=True)
-        last_response = ''.join(collected_messages)
 
+            if '\n' in chunk_message:
+                cursor = START_CURSOR
+                print_response_lpad()
+
+    last_response = ''.join(collected_messages)
     messages.append({"role": "assistant", "content": last_response})
     session_token_usage["completion_tokens"] += chunk_tokens
     print('\n\n', end='')
