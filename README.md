@@ -3,8 +3,11 @@
 
 ### Setup
 > To get started, you must first let `chat.py` where to find your `OPENAI_API_KEY`. 
+>
 > You can either add the file location of your API key to `config.json`,
-> or have the `OPENAI_API_KEY` environment variable set. Then, run
+> or have the `OPENAI_API_KEY` environment variable set. 
+>
+> Then, run
 > ```
 > chmod +x setup.sh && ./setup.sh
 > ```
