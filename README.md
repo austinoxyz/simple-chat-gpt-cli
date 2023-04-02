@@ -2,7 +2,7 @@
 > A simple CLI tool to use Chat GPT Chat Completions in the terminal
 
 ### Setup
-> To get started, you must first let `chatgpt.py` where to find your `OPENAI_API_KEY`. 
+> To get started, you must first let `chatgpt.py` know where to find your `OPENAI_API_KEY`. 
 >
 > You can either add the file location of your API key to `config.json` with the key `api_key_file`
 > or have the `OPENAI_API_KEY` environment variable set. 
