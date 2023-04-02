@@ -23,6 +23,7 @@
 > ``````
 > This will put a static binary named `chatgpt` into the user's `$HOME/.local/bin`, allowing
 > you to simply `chatgpt` and begin chatting.
+> NOTE: This requires `nuitka` to be installed via `pip`
 
 ### Capabilities
 > 1. Save and switch between prompts.
