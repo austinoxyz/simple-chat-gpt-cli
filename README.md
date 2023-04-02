@@ -2,7 +2,7 @@
 > A simple CLI tool to use Chat GPT Chat Completions in the terminal
 
 ### Setup
-> To get started, you must first let `chat.py` where to find your `OPENAI_API_KEY`. 
+> To get started, you must first let `chatgpt.py` where to find your `OPENAI_API_KEY`. 
 >
 > You can either add the file location of your API key to `config.json` with the key `api_key_file`
 > or have the `OPENAI_API_KEY` environment variable set. 
@@ -10,11 +10,19 @@
 > Then, run
 > ```
 > chmod +x setup.sh && ./setup.sh
-> ```
+> ``````
 > and finally you can
 > ```
-> python3 chat.py
+> python3 chatgpt.py
 > ``````
+>
+> Alternatively, to use this without having to `cd` into the directory containing `chatgpt.py`,
+> you can run
+> ```
+> chmod +x build-static-binary.sh && ./build-static-binary.sh
+> ``````
+> This will put a static binary named `chatgpt` into the user's `$HOME/.local/bin`, allowing
+> you to simply `chatgpt` and begin chatting.
 
 ### Capabilities
 > 1. Save and switch between prompts.
