@@ -476,16 +476,21 @@ def ask_save_chat() -> None:
     save_chat(messages, chat_name)
     chat_names.append(chat_name)
 
-def ask_selection() -> int:
+def ask_selection(n_selections: int) -> int:
     selected_n = 0
     while True:
         print_cli_prompt()
         selected_n = input()
-        if selected_n.isdigit():
+        if not selected_n.isdigit():
+            print("\n   Must enter number.")
+            continue
+        if int(selected_n) not in range(1, n_selections + 1):
+            print("\n   Selection not in appropriate range.")
+            continue
+        else:
             break
-        print("\n   Must enter number.")
     assert(selected_n != 0)
-    return selected_n
+    return int(selected_n)
 
 def confirm() -> bool:
     print_cli_prompt()
@@ -579,7 +584,7 @@ while True:
                         messages = []
                         continue
                 list_saved_prompts()
-                selected_prompt_n = ask_selection()
+                selected_prompt_n = ask_selection(len(prompt_names))
                 selected_prompt_name = prompt_names[int(selected_prompt_n) - 1]
                 prompt = load_prompt_from_name(selected_prompt_name, CONFIG['prompts_dir'])
                 apply_prompt_to_messages(messages, prompt)
@@ -604,7 +609,7 @@ while True:
                         print('\n   Not starting new chat.')
                         continue
                 list_saved_chats()
-                selected_chat_n = ask_selection()
+                selected_chat_n = ask_selection(len(chat_names))
                 selected_chat_name = chat_names[int(selected_chat_n) - 1]
                 messages = load_chat_from_name(selected_chat_name, CONFIG['chats_dir'])
                 continue
@@ -618,7 +623,7 @@ while True:
                             print('\n   Use existing prompt? y/n')
                             if confirm():
                                 list_saved_prompts()
-                                selected_prompt_n = ask_selection()
+                                selected_prompt_n = ask_selection(len(chat_names))
                                 selected_prompt_name = prompt_names[int(selected_prompt_n) - 1]
                                 prompt = load_prompt_from_name(selected_prompt_name, CONFIG['prompts_dir'])
                             else:
