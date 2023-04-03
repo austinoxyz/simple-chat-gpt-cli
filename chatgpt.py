@@ -6,8 +6,8 @@ import openai
 
 import readline
 
-from os import getenv, listdir
-from os.path import join
+from os import getenv, listdir, get_terminal_size
+from os.path import join, exists
 
 from subprocess import Popen, PIPE
 from time import time
@@ -22,8 +22,9 @@ APP_NAME = 'simple-chat'
 # for error messages on startup before config has been read
 ANSI_RED = '\033[31m'
 ANSI_GREEN = '\033[32m'
+ANSI_PURPLE = '\033[35m'
 
-# write ansi colored terminal output
+# write standard ansi colored terminal output
 def write_colored_output(output, color, end='\n') -> None:
     sys.stdout.write(color + output + '\033[0m' + end)
 
@@ -39,14 +40,12 @@ def get_xdg_dir(xdg_env_var: str) -> str:
         return str(Path.home().joinpath(default_loc, APP_NAME)) + '/'
     return str(Path(xdg_dir).joinpath(APP_NAME)) + '/'
 
-# store terminal width for text justification
-TERM_WIDTH = 80
-
 DEFAULT_CONFIG_OPTIONS = {
     'model': 'gpt-3.5-turbo',
     'prompts_dir': f"{get_xdg_dir('XDG_DATA_HOME')}prompts",
     'chats_dir': f"{get_xdg_dir('XDG_DATA_HOME')}chats",
     'token_usage_file': f"{get_xdg_dir('XDG_DATA_HOME')}token_usage.json",
+    'term_width': 80,
     'colors': {
         "black":   "#bdae93",
         "red":     "#9d0006",
@@ -59,6 +58,51 @@ DEFAULT_CONFIG_OPTIONS = {
     }
 }
 
+DEFAULT_CONFIG_LOCATION = get_xdg_dir('XDG_CONFIG_HOME') + 'config.json'
+config_location = DEFAULT_CONFIG_LOCATION
+
+chat_path_on_start = ''
+prompt_path_on_start = ''
+api_key_path = ''
+
+SHORT_OPTIONS = ['-f', '-c', '-p', '-k']
+LONG_OPTIONS  = ['--config', '--chat', '--prompt', '--key'] 
+
+def parse_cmd_line_options() -> None:
+    def option_value_valid(opt_idx: int) -> bool:
+        if opt_idx + 1 >= len(sys.argv) or sys.argv[opt_idx + 1][0] == '-':
+            print(f"\n    Must provide a value for option {sys.argv[opt_idx]}")
+            return False
+        elif not exists(sys.argv[opt_idx + 1]):
+            print(f"\n   The path provided to {sys.argv[opt_idx]} doesn't exist")
+            return False
+        return True
+
+    global config_location
+    global chat_path_on_start
+    global prompt_path_on_start
+    global api_key_path
+
+    for i in range(1, len(sys.argv), 2):
+        if sys.argv[i] not in SHORT_OPTIONS and sys.argv[i] not in LONG_OPTIONS:
+            write_colored_output("COMMAND ERROR", ANSI_RED, end='')
+            print(f"\n   Invalid option `{sys.argv[i]}`")
+            sys.exit(1)
+
+        if not option_value_valid(i):
+            sys.exit(1)
+
+        if sys.argv[i] == '-f' or sys.argv[i] == '--config':
+            config_location = sys.argv[i + 1]
+        elif sys.argv[i] == '-c' or sys.argv[i] == '--chat':
+            chat_path_on_start = sys.argv[i + 1]
+        elif sys.argv[i] == '-p' or sys.argv[i] == '--prompt':
+            prompt_path_on_start = sys.argv[i + 1]
+        elif sys.argv[i] == '-k' or sys.argv[i] == '--key':
+            api_key_path = sys.argv[i + 1]
+
+parse_cmd_line_options()
+
 def load_config(config_file_name: str) -> dict[str, any]:
     try:
         json_raw = ''
@@ -70,20 +114,27 @@ def load_config(config_file_name: str) -> dict[str, any]:
         print(f": Couldn't read config file.", end='', flush=True)
         sys.exit(1)
     except JSONDecodeError:
-        print(f"Malformed json in {config_file_name}:")
+        write_colored_output("CONFIG ERROR", ANSI_RED, end='')
+        print(f": Malformed json in {config_file_name}:\n")
         import traceback
         print(traceback.format_exc())
+        sys.exit(1)
 
     api_key_env_var = getenv('OPENAI_API_KEY', '')
-    if api_key_env_var != '':
+    if api_key_env_var:
         config['api_key'] = api_key_env_var
-    elif 'api_key_file' not in config:
+    elif 'api_key_file' not in config and api_key_path == '':
         write_colored_output("API_KEY ERROR", ANSI_RED, end='')
         print(f": Must include either an ", end='', flush=True)
         write_colored_output(f"api_key_file", ANSI_GREEN, end='')
-        print(" in config file,\n               or have the ", end = '', flush=True)
+        print(" in config file,\n               have the ", end='', flush=True)
         write_colored_output(f"OPENAI_API_KEY", ANSI_GREEN, end='')
-        print(f" environment variable set.", flush=True)
+        print(f" environment variable set,\n               \
+or have specified the key path with the ", end='', flush=True)
+        write_colored_output(f"--key", ANSI_PURPLE, end='')
+        print(" or ", end='', flush=True)
+        write_colored_output(f"-k", ANSI_PURPLE, end='')
+        print(" command line options.", flush=True)
         sys.exit(1)
 
     if 'model' not in config:
@@ -113,17 +164,25 @@ def load_config(config_file_name: str) -> dict[str, any]:
         if config['token_usage'][0] != '/':
             config['token_usage_file'] = get_xdg_dir('XDG_DATA_HOME') + config['token_usage_file']
 
+    if 'term_width' not in config:
+        config['term_width'] = DEFAULT_CONFIG_OPTIONS['term_width']
+    else:
+        true_term_width = get_terminal_size().columns # os.get_terminal_size
+        if config['term_width'] == 0 or config['term_width'] > true_term_width:
+            config['term_width'] = true_term_width
+
     if 'colors' not in config:
         config['colors'] = DEFAULT_CONFIG_OPTIONS['colors']
 
     return config
 
-config = load_config(get_xdg_dir('XDG_CONFIG_HOME') + '/config.json')
-
-if 'api_key' in config:
-    openai.api_key = config['api_key']
+CONFIG = load_config(config_location)
+if api_key_path:
+    openai.api_key_path = api_key_path
+elif 'api_key' in CONFIG:
+    openai.api_key = CONFIG['api_key']
 else:
-    openai.api_key_path = config['api_key_file']
+    openai.api_key_path = CONFIG['api_key_file']
 
 def convert_hex_to_truecolor_ansi(color: str) -> str:
     r = int(color[1:3], base=16)
@@ -138,14 +197,14 @@ TRUECOLOR_PATTERN = re.compile(r'\x1b\[([\d;]*)([A-Za-z])')
 def len_truecolor(truecolor_string: str) -> int:
     return len(TRUECOLOR_PATTERN.sub('', truecolor_string))
 
-def center_truecolor(truecolor_string: str, width=TERM_WIDTH):
+def center_truecolor(truecolor_string: str, width=CONFIG['term_width']):
     length = len_truecolor(truecolor_string)
     if length >= width:
         return truecolor_string
     padding = ' ' * floor((width - length) / 2)
     return padding + truecolor_string + padding
 
-def rjust_truecolor(truecolor_string: str, width=TERM_WIDTH):
+def rjust_truecolor(truecolor_string: str, width=CONFIG['term_width']):
     length = len_truecolor(truecolor_string)
     if length >= width:
         return truecolor_string
@@ -154,7 +213,7 @@ def rjust_truecolor(truecolor_string: str, width=TERM_WIDTH):
 def split_string_into_len_n_substrings(input_string: str, n: int) -> list[str]:
     return [input_string[i:i+n] for i in range(0, len(input_string), n)]
 
-def wrap_truecolor_text(text: str, width_box: (int, int), pos: (int)) -> list[str]:
+def wrap_truecolor_text(text: str, width_box: (int, int), pos: int) -> list[str]:
     wrapped_text = []
     words = text.split(' ')
     if len(words) == 1:
@@ -172,7 +231,7 @@ def wrap_truecolor_text(text: str, width_box: (int, int), pos: (int)) -> list[st
             wrapped_text.append(line)
             line = word
     wrapped_text.append(line)
-    wrapped_text = [line for line in wrapped_text if line != '']
+    wrapped_text = [line for line in wrapped_text if line]
     return wrapped_text
 
 # use xclip to put the last chat completion in the clipboard
@@ -204,7 +263,6 @@ def levenshtein_dist(s1: str, s2: str) -> int:
     return (prefix_matrix.flatten())[prefix_matrix.size - 1]
 
 def load_prompt_names(prompts_dir: str) -> list[str]:
-    res = []
     try:
         res = [filename[:-7] for filename in listdir(prompts_dir) if filename.endswith('.prompt')]
     except FileNotFoundError:
@@ -214,9 +272,7 @@ def load_prompt_names(prompts_dir: str) -> list[str]:
         sys.exit(1)
     return res
 
-def load_prompt(prompt_name: str, prompts_dir: str) -> str:
-    prompt_file_name = prompt_name + '.prompt'
-    prompt_path = join(prompts_dir, prompt_file_name)  # os.path.join
+def load_prompt(prompt_path: str) -> str:
     try:
         with open(prompt_path, 'r') as prompt_file:
             prompt = prompt_file.read()
@@ -227,6 +283,11 @@ def load_prompt(prompt_name: str, prompts_dir: str) -> str:
         sys.exit(1)
     print(f'\n   Loaded prompt at {truecolor_ify(prompt_path, CFG_COLOR)}')
     return prompt
+
+def load_prompt_from_name(prompt_name: str, prompts_dir: str) -> str:
+    prompt_file_name = prompt_name + '.prompt'
+    prompt_path = join(prompts_dir, prompt_file_name)  # os.path.join
+    return load_prompt(prompt_path)
 
 def save_prompt(prompt: str, prompt_name: str, prompts_dir: str) -> None:
     prompt_file_name = prompt_name + '.prompt'
@@ -242,7 +303,6 @@ def save_prompt(prompt: str, prompt_name: str, prompts_dir: str) -> None:
     print(f'\n   Saved to {color_prompts_dir}/{prompt_file_name}')
 
 def load_chat_names(chats_dir: str) -> list[str]:
-    res = []
     try:
         res = [filename[:-5] for filename in listdir(chats_dir) if filename.endswith('.chat')]
     except FileNotFoundError:
@@ -252,9 +312,7 @@ def load_chat_names(chats_dir: str) -> list[str]:
         sys.exit(1)
     return res
 
-def load_chat(chat_name: str, chats_dir: str) -> list[dict[str,str]]:
-    chat_file_name = chat_name + '.chat'
-    chat_path = join(chats_dir, chat_file_name)  # os.path.join
+def load_chat(chat_path: str) -> str:
     try:
         with open(chat_path, 'r') as chat_file:
             chat = loads(chat_file.readline())
@@ -266,9 +324,14 @@ def load_chat(chat_name: str, chats_dir: str) -> list[dict[str,str]]:
     print(f'\n   Loaded chat at {truecolor_ify(chat_path, CFG_COLOR)}')
     return chat
 
+def load_chat_from_name(chat_name: str, chats_dir: str) -> list[dict[str,str]]:
+    chat_file_name = chat_name + '.chat'
+    chat_path = join(chats_dir, chat_file_name)  # os.path.join
+    return load_chat(chat_path)
+
 def save_chat(messages: list[dict[str, str]], chat_name: str) -> None:
     chat_file_name = chat_name + '.chat'
-    save_path = join(config['chats_dir'], chat_file_name)  # os.path.join
+    save_path = join(CONFIG['chats_dir'], chat_file_name)  # os.path.join
     color_chats_dir = truecolor_ify('$chats_dir', CFG_COLOR)
     try:
         with open(save_path, 'w') as outfile:
@@ -294,25 +357,25 @@ def account_token_usage(request_token_usage: dict[str, int]) -> None:
     pass
 
 
-token_usage = load_token_usage(config['token_usage_file'])
+token_usage = load_token_usage(CONFIG['token_usage_file'])
 session_token_usage = { "completion_tokens": 0, "prompt_tokens": 0, "total_tokens": 0 }
 
-prompt_names = load_prompt_names(config['prompts_dir'])
+prompt_names = load_prompt_names(CONFIG['prompts_dir'])
 def list_saved_prompts() -> None:
     print(flush=True)
     for i, name in enumerate(prompt_names):
         print(f"   {i+1}. {name}")
     print(flush=True)
 
-chat_names = load_chat_names(config['chats_dir'])
+chat_names = load_chat_names(CONFIG['chats_dir'])
 def list_saved_chats() -> None:
     print(flush=True)
     for i, name in enumerate(chat_names):
         print(f"   {i+1}. {name}")
     print(flush=True)
 
-CMD_COLOR = config['colors']['blue']
-CFG_COLOR = config['colors']['green']
+CMD_COLOR = CONFIG['colors']['blue']
+CFG_COLOR = CONFIG['colors']['green']
 
 commands = { 'exit':         "exit simple-chat-gpt-cli", 
              'help':         "display the message you are currently reading.",
@@ -352,18 +415,18 @@ def find_similar_command_name(user_input: str) -> str:
 
 def print_startup_message() -> None:
     print(flush=True)
-    print('Welcome to simple-chat-gpt-cli'.center(TERM_WIDTH))
+    print('Welcome to simple-chat-gpt-cli'.center(CONFIG['term_width']))
     print(center_truecolor(f"\ttype {truecolor_ify('exit', CMD_COLOR)} to exit, or \
 {truecolor_ify('help', CMD_COLOR)} for a list of commands"))
     print(flush=True)
 
 
 def print_help_message() -> None:
-    command_name_total_space = int(TERM_WIDTH * 0.35)
+    command_name_total_space = int(CONFIG['term_width'] * 0.35)
     for command_name in commands:
         colored_command = truecolor_ify(command_name, CMD_COLOR)
         usage_split = wrap_truecolor_text(commands[command_name], 
-                                (command_name_total_space + 2, TERM_WIDTH), 
+                                (command_name_total_space + 2, CONFIG['term_width']), 
                                 command_name_total_space + 2)
         print(rjust_truecolor(colored_command, width=(command_name_total_space)), end='')
         print(f"  {usage_split[0]}")
@@ -375,12 +438,12 @@ def print_help_message() -> None:
 
 
 
-CLI_PROMPT = f"{truecolor_ify('   >>> ', config['colors']['yellow'])}"
+CLI_PROMPT = f"{truecolor_ify('   >>> ', CONFIG['colors']['yellow'])}"
 def print_cli_prompt() -> None:
     print(CLI_PROMPT, end='')
 
 START_CURSOR = 7  # aligns with the user's cli prompt
-END_CURSOR = TERM_WIDTH - 7
+END_CURSOR = CONFIG['term_width'] - 7
 def print_response_lpad() -> None:
     print(f"{' ' * START_CURSOR}", flush=True, end='')
 
@@ -396,7 +459,7 @@ def ask_save_prompt(prompt: str) -> None:
             if not confirm():
                 print('\n   Prompt left unsaved.')
                 return
-        save_prompt(prompt, prompt_name, config['prompts_dir'])
+        save_prompt(prompt, prompt_name, CONFIG['prompts_dir'])
         prompt_names.append(prompt_name)
 
 def ask_save_chat() -> None:
@@ -430,7 +493,7 @@ def confirm() -> bool:
     return are_you_sure in ['y', 'yes']
 
 def enter_prompt(messages: list[dict[str, str]]) -> None:
-    print('Enter your prompt:'.center(TERM_WIDTH)); print(flush=True)
+    print('Enter your prompt:'.center(CONFIG['term_width'])); print(flush=True)
     print_cli_prompt()
     prompt = input()
     ask_save_prompt(prompt)
@@ -443,12 +506,22 @@ def apply_prompt_to_messages(messages: list[dict[str, str]], prompt: str) -> Non
             return
     messages = [ {'role': 'system', 'content': prompt}, *messages ]
 
-        
 
-last_response = ''
-messages = []
+
+# BEGIN APP FUNCTIONALITY
 
 print_startup_message()
+        
+messages = [{'role': 'system', 'content': ''}]
+
+if chat_path_on_start:
+    messages = load_chat(chat_path_on_start)
+
+if prompt_path_on_start:
+    prompt = load_prompt(prompt_path_on_start)
+    apply_prompt_to_messages(messages, prompt)
+
+last_response = ''
 while True:
     print_cli_prompt()
     # FIXME: Pasting in messages with newlines breaks this
@@ -458,8 +531,8 @@ while True:
         continue 
 
     closest_command = find_similar_command_name(message)
-    if closest_command != '':
-        print(center_truecolor(f"Did you mean {truecolor_ify(closest_command, CMD_COLOR)}?", TERM_WIDTH))
+    if closest_command:
+        print(center_truecolor(f"Did you mean {truecolor_ify(closest_command, CMD_COLOR)}?", CONFIG['term_width']))
         continue
 
     split_message = message.split(' ')
@@ -475,15 +548,15 @@ while True:
         elif split_message[0] == 'clip':
             if last_response == '':
                 print(center_truecolor(f"\n   Must provide an initial message before you can \
-{truecolor_ify('clip', CMD_COLOR)}", TERM_WIDTH))
+{truecolor_ify('clip', CMD_COLOR)}", CONFIG['term_width']))
                 continue
             set_clipboard_text(last_response)
             continue
         elif split_message[0] == 'prompt':
             if split_message[1] == 'new':
                 chat_type = 'current'
-                if last_response != '':
-                    print('Start new chat? y/n')
+                if last_response:
+                    print('\n   Start new chat? y/n')
                     if confirm():
                         chat_type = 'new'
                         messages = []
@@ -492,15 +565,15 @@ while True:
                 continue
             elif split_message[1] == 'list':
                 if len(prompt_names) == 0:
-                    print(f"\n   No prompts located in {truecolor_ify(config['prompts_dir'], CFG_COLOR)}")
+                    print(f"\n   No prompts located in {truecolor_ify(CONFIG['prompts_dir'], CFG_COLOR)}")
                     continue
                 list_saved_prompts()
                 continue
             elif split_message[1] == 'load':
                 if len(prompt_names) == 0:
-                    print(f"\n   No prompts located in {truecolor_ify(config['prompts_dir'], CFG_COLOR)}")
+                    print(f"\n   No prompts located in {truecolor_ify(CONFIG['prompts_dir'], CFG_COLOR)}")
                     continue
-                if last_response != '':
+                if last_response:
                     print('\n   Start new chat? y/n')
                     if confirm():
                         messages = []
@@ -508,7 +581,7 @@ while True:
                 list_saved_prompts()
                 selected_prompt_n = ask_selection()
                 selected_prompt_name = prompt_names[int(selected_prompt_n) - 1]
-                prompt = load_prompt(selected_prompt_name, config['prompts_dir'])
+                prompt = load_prompt_from_name(selected_prompt_name, CONFIG['prompts_dir'])
                 apply_prompt_to_messages(messages, prompt)
                 continue
         elif split_message[0] == 'save':
@@ -517,15 +590,15 @@ while True:
         elif split_message[0] == 'chat':
             if split_message[1] == 'list':
                 if len(chat_names) == 0:
-                    print(f"\n   No chats located in {truecolor_ify(config['chats_dir'], CFG_COLOR)}")
+                    print(f"\n   No chats located in {truecolor_ify(CONFIG['chats_dir'], CFG_COLOR)}")
                     continue
                 list_saved_chats()
                 continue
             elif split_message[1] == 'load':
                 if len(chat_names) == 0:
-                    print(f"\n   No chats located in {truecolor_ify(config['prompts_dir'], CFG_COLOR)}")
+                    print(f"\n   No chats located in {truecolor_ify(CONFIG['prompts_dir'], CFG_COLOR)}")
                     continue
-                if last_response != '':
+                if last_response:
                     print('\n   Leave current chat? y/n')
                     if not confirm():
                         print('\n   Not starting new chat.')
@@ -533,7 +606,7 @@ while True:
                 list_saved_chats()
                 selected_chat_n = ask_selection()
                 selected_chat_name = chat_names[int(selected_chat_n) - 1]
-                messages = load_chat(selected_chat_name, config['chats_dir'])
+                messages = load_chat_from_name(selected_chat_name, CONFIG['chats_dir'])
                 continue
             elif split_message[1] == 'new':
                 print('\n   Leave current chat? y/n')
@@ -547,7 +620,7 @@ while True:
                                 list_saved_prompts()
                                 selected_prompt_n = ask_selection()
                                 selected_prompt_name = prompt_names[int(selected_prompt_n) - 1]
-                                prompt = load_prompt(selected_prompt_name, config['prompts_dir'])
+                                prompt = load_prompt_from_name(selected_prompt_name, CONFIG['prompts_dir'])
                             else:
                                 enter_prompt(messages)
                         else:
@@ -561,12 +634,12 @@ while True:
 
     try:
         response = openai.ChatCompletion.create(
-            model=config['model'],
+            model=CONFIG['model'],
             messages=messages,
             temperature=0,
             stream=True)
     except Exception as ex:
-        print(f"\n   Something went wrong: {truecolor_ify(str(ex), config['colors']['red'])}\n")
+        print(f"\n   Something went wrong: {truecolor_ify(str(ex), CONFIG['colors']['red'])}\n")
         sys.exit(1)
 
     cursor = START_CURSOR
