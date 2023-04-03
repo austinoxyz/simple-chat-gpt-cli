@@ -1,9 +1,7 @@
 # Simple Chat GPT CLI
 > A simple CLI tool to use Chat GPT Chat Completions in the terminal
 
-```
 ![Picture showing sample use of the cli tool.](res/simple-chat.png)
-```
 
 ### Setup
 To get started, you must first let `chatgpt.py` know where to find your `OPENAI_API_KEY`. 
