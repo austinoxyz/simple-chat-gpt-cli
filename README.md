@@ -34,3 +34,9 @@
 > See `example_config.json` for available configuration options.
 > Both relative and absolute paths will be accepted.
 
+### Command Line Options
+> 1. `--key` or `-k`: The path to the `OPENAI_API_KEY` file that you would like to use.
+> 2. `--chat` or `-c`: The file containing the message history of the chat to load on startup.
+> 3. `--prompt` or `-p`: The file containing the prompt to load on startup.
+> 4. `--config` or `-f`: The file configuration file to use.
+
