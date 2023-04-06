@@ -1,5 +1,5 @@
 # Simple Chat GPT CLI
-> A simple CLI tool to use Chat GPT Chat Completions in the terminal
+> A simple CLI tool to use ChatGPT Chat Completions in the terminal
 
 ![Picture showing sample use of the cli tool.](res/simple-chat.png)
 
@@ -23,7 +23,7 @@ you can run
 ```
 chmod +x build-static-binary.sh && ./build-static-binary.sh
 ``````
-This will put a static binary named `chatgpt` into the user's `$HOME/.local/bin`, allowing
+This will put a static binary named `chatgpt` into the your `$HOME/.local/bin`, allowing
 you to simply `chatgpt` and begin chatting.
 NOTE: This requires `nuitka` to be installed via `pip`
 
