@@ -399,11 +399,9 @@ SIMILAR_COMMAND_LENGTH_CUTOFF = len(LONGEST_COMMAND_NAME) + LONGEST_PROMPT_NAME
 def find_similar_command_name(user_input: str) -> str:
     if len(user_input) >= SIMILAR_COMMAND_LENGTH_CUTOFF:
         return ''
-    distances = []
-    for command_name in commands:
-        dist = levenshtein_dist(user_input, command_name)
-        if dist < LEV_DIST_CUTOFF:
-            distances.append((command_name, dist))
+    distances = [(command_name, dist) for (command_name, dist) in \
+[(command_name, levenshtein_dist(user_input, command_name)) for command_name in commands] \
+if dist < LEV_DIST_CUTOFF]
     if len(distances) == 0:
         return ''
     minimum = min(distances, key=lambda c:c[1])
