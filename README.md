@@ -32,6 +32,8 @@ python chatgpt.py -c config.json
 python chatgpt.py -k openai.key
 ``````
 
+That's it!
+
 ### Features
 1. Save and switch between prompts.
 2. Save and switch between chats.
