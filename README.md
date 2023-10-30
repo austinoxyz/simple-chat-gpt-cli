@@ -1,44 +1,53 @@
 # Simple Chat GPT CLI
 > A simple CLI tool to use ChatGPT Chat Completions in the terminal
 
-![Picture showing sample use of the cli tool.](res/simple-chat.png)
+![sample-use-image](res/simple-chat.png)
 
 ### Setup
-To get started, you must first let `chatgpt.py` know where to find your `OPENAI_API_KEY`. 
-
-You can either add the file location of your API key to `config.json` with the key `api_key_file`
-or have the `OPENAI_API_KEY` environment variable set. 
-
-Then, run
+First, run
 ```
 chmod +x setup.sh && ./setup.sh
 ``````
-and finally you can
+to create the default directories for loading and saving chats and prompts.
+
+Next, we have to let `chatgpt.py` know where to find your `OPENAI_API_KEY`. 
+This can be be done either by configuration file, environment variable, or as a command line option.
+
+For example, by using a minimal user defined `config.json`
 ```
-python3 chatgpt.py
+{
+    "api_key_file": "/path/to/my/chats/openai_key_file"
+}
 ``````
 
-Alternatively, to use this without having to `cd` into the directory containing `chatgpt.py`,
-you can run
+by setting the `OPENAI_API_KEY` environment variable,
 ```
-chmod +x build-static-binary.sh && ./build-static-binary.sh
+  OPENAI_API_KEY="`cat openai.key`" python3 chatgpt.py
 ``````
-This will put a static binary named `chatgpt` into the your `$HOME/.local/bin`, allowing
-you to simply `chatgpt` and begin chatting.
-NOTE: This requires `nuitka` to be installed via `pip`
 
-### Capabilities
+or by command line option
+```
+python chatgpt.py -c config.json
+# see sample example_config.json for full customization options
+python chatgpt.py -k openai.key
+``````
+
+### Features
 1. Save and switch between prompts.
 2. Save and switch between chats.
-3. Store the contents of the last response in the clipboard using `xclip`.
+3. Store the last response of ChatGPT in the clipboard via `xclip`.
 
 ### Configuration
-See `example_config.json` for available configuration options.
-Both relative and absolute paths will be accepted.
+See [example config.json](example_config.json) for available configuration options.
 
 ### Command Line Options
-1. `--key` or `-k`: The path to the `OPENAI_API_KEY` file that you would like to use.
-2. `--chat` or `-c`: The file containing the message history of the chat to load on startup.
-3. `--prompt` or `-p`: The file containing the prompt to load on startup.
-4. `--config` or `-f`: The file configuration file to use.
+1. `--key`    or `-k`: `OPENAI_API_KEY` file.
+2. `--chat`   or `-c`: File containing a chat message history to load on startup.
+3. `--prompt` or `-p`: File containing the prompt to load on startup.
+4. `--config` or `-f`: Configuration file to use.
 
+### Static binary
+Alternatively, to avoid directly invoking `python` if `nuitka` is installed, a static binary can be built by running
+```
+chmod u+x build-static-binary.sh && ./build-static-binary.sh
+``````
