@@ -3,6 +3,12 @@
 
 ![sample-use-image](res/simple-chat.png)
 
+### Dependencies
+The only dependencies are the pip packages `openai` and `numpy`
+```
+pip install openai numpy
+``````
+
 ### Setup
 First, run
 ```
@@ -40,7 +46,7 @@ That's it!
 3. Store the last response of ChatGPT in the clipboard via `xclip`.
 
 ### Configuration
-See [example config.json](example_config.json) for available configuration options.
+See [example_config.json](example_config.json) for available configuration options.
 
 ### Command Line Options
 1. `--key`    or `-k`: `OPENAI_API_KEY` file.
@@ -51,5 +57,6 @@ See [example config.json](example_config.json) for available configuration optio
 ### Static binary
 Alternatively, to avoid directly invoking `python`, a static binary can be built using `nuitka` by running
 ```
+pip install nuitka
 chmod u+x build-static-binary.sh && ./build-static-binary.sh
 ``````
