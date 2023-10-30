@@ -28,7 +28,7 @@ For example, by using a minimal user defined `config.json`
 
 by setting the `OPENAI_API_KEY` environment variable,
 ```
-  OPENAI_API_KEY="`cat openai.key`" python3 chatgpt.py
+OPENAI_API_KEY="`cat openai.key`" python3 chatgpt.py
 ``````
 
 or by command line option
