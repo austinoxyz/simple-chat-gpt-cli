@@ -49,7 +49,7 @@ See [example config.json](example_config.json) for available configuration optio
 4. `--config` or `-f`: Configuration file to use.
 
 ### Static binary
-Alternatively, to avoid directly invoking `python` if `nuitka` is installed, a static binary can be built by running
+Alternatively, to avoid directly invoking `python`, a static binary can be built using `nuitka` by running
 ```
 chmod u+x build-static-binary.sh && ./build-static-binary.sh
 ``````
